@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); prisma.amenityPlacement.create({ data: { amenityId: 1, conversionId: 1, x: 100, y: 100, width: 20, height: 20, rotation: 0, layerOrder: 0 } }).then(console.log).catch(console.error).finally(() => prisma.$disconnect());

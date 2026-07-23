@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model CadProject {
+  id          Int             @id @default(autoincrement())
+  name        String          @unique
+  latitude    Float?
+  longitude   Float?
+  mapZoom     Int?
+  address     String?
+  city        String?
+  state       String?
+  country     String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  conversions CadConversion[]
+  plots       ProjectPlot[]
+  amenityPlacements AmenityPlacement[]
+  plotStatuses PlotStatus[]
+}
+
+model CadConversion {
+  id               Int         @id @default(autoincrement())
+  projectId        Int?
+  project          CadProject? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  originalFileName String
+  originalFilePath String
+  svgFilePath      String?
+  cadVersion       String?
+  status           String      @default("PENDING") // PENDING, PROCESSING, SUCCESS, FAILED
+  conversionTime   Int?
+  fileSize         Int?
+  entityCount      Int?
+  layerCount       Int?
+  blockCount       Int?
+  errorMessage     String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  amenityPlacements AmenityPlacement[]
+}
+
+model Amenity {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  category    String
+  iconPath        String
+  description     String?
+  defaultWidth    Float?
+  defaultHeight   Float?
+  defaultRotation Float?
+  createdAt       DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  placements  AmenityPlacement[]
+}
+
+model PlotStatus {
+  id           Int           @id @default(autoincrement())
+  projectId    Int
+  project      CadProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name         String
+  fillColor    String
+  isActive     Boolean       @default(true)
+  displayOrder Int           @default(0)
+  description  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  plots        ProjectPlot[]
+
+  @@unique([projectId, name])
+}
+
+model ProjectPlot {
+  id          Int         @id @default(autoincrement())
+  projectId   Int
+  project     CadProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  plotNumber  String
+  width       Float?
+  height      Float?
+  areaSqFt    Float?
+  areaSqYard  Float?
+  areaSqMeter Float?
+  statusId    Int?
+  status      PlotStatus? @relation(fields: [statusId], references: [id])
+  description String?
+  remarks     String?
+  cadRegionId String? // To link with specific regions in the CAD editor SVG
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([projectId, plotNumber])
+}
+
+model AmenityPlacement {
+  id           Int           @id @default(autoincrement())
+  amenityId    Int
+  amenity      Amenity       @relation(fields: [amenityId], references: [id])
+  projectId    Int
+  project      CadProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conversionId Int
+  conversion   CadConversion @relation(fields: [conversionId], references: [id], onDelete: Cascade)
+  x            Float
+  y            Float
+  width        Float
+  height       Float
+  rotation     Float         @default(0)
+  layerOrder   Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
