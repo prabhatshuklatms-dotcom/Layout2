@@ -147,7 +147,7 @@ function pbComputeCentroid(el) {
  * Handles nested transforms by mapping the click to each element's local space.
  */
 function cadHitTestRegion(svgEl, clientX, clientY) {
-  const VALID_TAGS = ['path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse'];
+  const VALID_TAGS = ['path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse', 'line', 'text', 'tspan', 'use'];
   const candidates = [];
   
   let svgPtRoot;
@@ -192,6 +192,19 @@ function cadHitTestRegion(svgEl, clientX, clientY) {
              if (pts && pts.length >= 3 && pbPointInPoly(localPt.x, localPt.y, pts)) {
                isHit = true;
              }
+           }
+        }
+
+        // Strategy 3: Bounding box hit testing for hollow shapes or newly added tags (line, text, use)
+        if (!isHit) {
+           const fill = el.getAttribute('fill');
+           const tagLower = el.tagName.toLowerCase();
+           if (!fill || fill === 'none' || fill === 'transparent' || ['line', 'text', 'tspan', 'use'].includes(tagLower)) {
+              const rect = el.getBoundingClientRect();
+              // Add a small 2px padding to make it easier to select thin lines/strokes
+              if (clientX >= rect.left - 2 && clientX <= rect.right + 2 && clientY >= rect.top - 2 && clientY <= rect.bottom + 2) {
+                 isHit = true;
+              }
            }
         }
 

@@ -37,16 +37,7 @@ export default function CadEditorToolbar({ activeTool, onToolChange }) {
         ))}
       </div>
       
-      <div className="w-6 h-px bg-zinc-800 my-2" />
-      
-      <div className="flex flex-col gap-2 w-full px-2">
-        <button className="w-8 h-8 rounded flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors" title="Layers (Coming Soon)">
-          <Layers size={16} />
-        </button>
-        <button className="w-8 h-8 rounded flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors" title="Settings">
-          <Settings2 size={16} />
-        </button>
-      </div>
+
       </div>
     </div>
   );
