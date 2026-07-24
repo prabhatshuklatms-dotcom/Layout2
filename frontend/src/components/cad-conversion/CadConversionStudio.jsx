@@ -151,7 +151,7 @@ export default function CadConversionStudio({ projectId }) {
           <div className="flex-1 flex flex-col p-6 min-w-0 pr-3">
              {/* Canvas Container */}
              <div className="flex-1 relative rounded-xl border border-zinc-800 overflow-hidden bg-[#0f1115] shadow-2xl mb-4">
-                <SvgPreview conversion={selectedConversion} />
+                <SvgPreview conversion={selectedConversion} conversions={conversions} projectId={projectId} />
              </div>
              
              {/* Console Container */}

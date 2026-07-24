@@ -13,6 +13,8 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@techstark/opencv-js": "^5.0.0-release.1",
+    "@turf/area": "^7.3.5",
+    "@turf/helpers": "^7.3.5",
     "axios": "^1.18.1",
     "date-fns": "^4.4.0",
     "html-to-image": "^1.11.13",

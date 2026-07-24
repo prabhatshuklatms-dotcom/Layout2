@@ -10,6 +10,7 @@ import { PlotStatusModule } from './plot-status/plot-status.module';
 import { ProjectPlotModule } from './project-plot/project-plot.module';
 import { AmenityModule } from './amenity/amenity.module';
 import { AmenityPlacementModule } from './amenity-placement/amenity-placement.module';
+import { ProjectBoundaryModule } from './project-boundary/project-boundary.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AmenityPlacementModule } from './amenity-placement/amenity-placement.mo
     ProjectPlotModule,
     AmenityModule,
     AmenityPlacementModule,
+    ProjectBoundaryModule,
   ],
   controllers: [AppController],
   providers: [AppService],

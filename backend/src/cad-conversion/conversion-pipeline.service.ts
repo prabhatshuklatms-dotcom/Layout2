@@ -242,13 +242,15 @@ export class CadSvgRenderer {
     for (const entity of entities) {
       const color = this.getColor(entity);
       const strokeStr = color !== 'currentColor' ? `stroke="${color}"` : '';
+      const bgAttr = `data-cad-type="background"`;
+      const combinedAttrs = strokeStr ? `${bgAttr} ${strokeStr}` : bgAttr;
 
       try {
         if (entity.type === 'LINE') {
           const x1 = entity.vertices[0].x, y1 = entity.vertices[0].y;
           const x2 = entity.vertices[1].x, y2 = entity.vertices[1].y;
           if (trackBounds) { this.addBounds(x1, y1); this.addBounds(x2, y2); }
-          this.paths.push(`<line x1="${x1}" y1="${-y1}" x2="${x2}" y2="${-y2}" ${strokeStr} />`);
+          this.paths.push(`<line x1="${x1}" y1="${-y1}" x2="${x2}" y2="${-y2}" ${combinedAttrs} />`);
           this.convertedCount++;
 
         } else if (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE') {
@@ -269,7 +271,7 @@ export class CadSvgRenderer {
             d += ' ' + this.getBulgeArc(vLast.x, -vLast.y, vFirst.x, -vFirst.y, vLast.bulge);
             d += ' Z';
           }
-          this.paths.push(`<path d="${d}" fill="none" ${strokeStr} />`);
+          this.paths.push(`<path d="${d}" fill="none" ${combinedAttrs} />`);
           this.convertedCount++;
 
         } else if (entity.type === 'ARC') {
@@ -288,13 +290,13 @@ export class CadSvgRenderer {
           
           const largeArcFlag = sweepAngle > Math.PI ? 1 : 0;
           const sweepFlag = 0;
-          this.paths.push(`<path d="M ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${x2} ${y2}" fill="none" ${strokeStr} />`);
+          this.paths.push(`<path d="M ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${x2} ${y2}" fill="none" ${combinedAttrs} />`);
           this.convertedCount++;
 
         } else if (entity.type === 'CIRCLE') {
           const cx = entity.center.x, cy = -entity.center.y, r = entity.radius;
           if (trackBounds) { this.addBounds(entity.center.x - r, entity.center.y - r); this.addBounds(entity.center.x + r, entity.center.y + r); }
-          this.paths.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" ${strokeStr} />`);
+          this.paths.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" ${combinedAttrs} />`);
           this.convertedCount++;
 
         } else if (entity.type === 'ELLIPSE') {
@@ -308,7 +310,7 @@ export class CadSvgRenderer {
           // DXF Ellipse can be rotated. Angle = atan2(my, mx)
           const angle = Math.atan2(my, mx) * (180 / Math.PI);
           // SVG ellipse
-          this.paths.push(`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" transform="rotate(${-angle} ${cx} ${cy})" fill="none" ${strokeStr} />`);
+          this.paths.push(`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" transform="rotate(${-angle} ${cx} ${cy})" fill="none" ${combinedAttrs} />`);
           this.convertedCount++;
 
         } else if (entity.type === 'SPLINE') {
@@ -322,7 +324,7 @@ export class CadSvgRenderer {
             if (trackBounds) this.addBounds(pt.x, pt.y);
             d += ` L ${pt.x} ${-pt.y}`;
           }
-          this.paths.push(`<path d="${d}" fill="none" ${strokeStr} opacity="0.8" stroke-dasharray="2 2" />`); // dashed to show it's approximated
+          this.paths.push(`<path d="${d}" fill="none" ${combinedAttrs} opacity="0.8" stroke-dasharray="2 2" />`); // dashed to show it's approximated
           this.convertedCount++;
 
         } else if (entity.type === 'MTEXT' || entity.type === 'TEXT') {
@@ -345,7 +347,7 @@ export class CadSvgRenderer {
             rot = -entity.rotation;
           }
           const fillStr = color !== 'currentColor' ? `fill="${color}"` : 'fill="currentColor"';
-          this.paths.push(`<text x="${x}" y="${y}" font-size="${h}" font-family="sans-serif" transform="rotate(${rot} ${x} ${y})" ${fillStr} stroke="none" alignment-baseline="middle" text-anchor="middle">${text}</text>`);
+          this.paths.push(`<text x="${x}" y="${y}" font-size="${h}" font-family="sans-serif" transform="rotate(${rot} ${x} ${y})" ${fillStr} stroke="none" alignment-baseline="middle" text-anchor="middle" data-cad-type="background">${text}</text>`);
           this.convertedCount++;
 
         } else if (entity.type === 'INSERT') {

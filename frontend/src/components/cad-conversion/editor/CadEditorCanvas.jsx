@@ -161,8 +161,8 @@ function cadHitTestRegion(svgEl, clientX, clientY) {
 
   for (const tag of VALID_TAGS) {
     svgEl.querySelectorAll(tag).forEach(el => {
-      // Ignore overlays, labels, hatches
-      if (el.getAttribute('data-cad-type') === 'hatch' || el.closest('.cad-overlay') || el.style.pointerEvents === 'none' || el.getAttribute('pointer-events') === 'none') {
+      // Ignore overlays, labels, hatches, and background CAD geometry
+      if (el.getAttribute('data-cad-type') === 'hatch' || el.getAttribute('data-cad-type') === 'background' || el.closest('.cad-overlay') || el.style.pointerEvents === 'none' || el.getAttribute('pointer-events') === 'none') {
         return;
       }
       
@@ -815,96 +815,6 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
 }
 
 
-// ─── Floating Toolbar ────────────────────────────────────────────────────────
-function CadEditorFloatingToolbar({ selectedShapeIds, documentState, containerRef, svgRef, scale, onAction }) {
-  const [pos, setPos] = useState(null);
-
-  useEffect(() => {
-    if (!svgRef.current || selectedShapeIds.length === 0 || !containerRef.current) {
-      setPos(null); return;
-    }
-    // Compute bounding box of all selected shapes in screen coords
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const id of selectedShapeIds) {
-      const el = svgRef.current.querySelector(`#${CSS.escape(id)}`);
-      if (el) {
-        try {
-          const rect = el.getBoundingClientRect();
-          minX = Math.min(minX, rect.left); minY = Math.min(minY, rect.top);
-          maxX = Math.max(maxX, rect.right); maxY = Math.max(maxY, rect.bottom);
-        } catch(_) {}
-      }
-    }
-    if (minX === Infinity) { setPos(null); return; }
-    const containerRect = containerRef.current.getBoundingClientRect();
-    setPos({
-      x: (minX + maxX) / 2 - containerRect.left,
-      y: minY - containerRect.top - 48,
-    });
-  }, [selectedShapeIds, documentState.shapes, svgRef, containerRef, scale]);
-
-  if (!pos || selectedShapeIds.length === 0) return null;
-
-  const btnClass = "p-1.5 rounded hover:bg-zinc-600/80 transition-colors text-zinc-300 hover:text-white";
-  const sepClass = "w-px h-5 bg-zinc-600 mx-0.5";
-
-  return (
-    <div
-      className="absolute z-50 flex items-center gap-0.5 bg-zinc-800/95 backdrop-blur-sm border border-zinc-700 rounded-lg px-1 py-0.5 shadow-xl"
-      style={{ left: pos.x, top: Math.max(4, pos.y), transform: 'translateX(-50%)' }}
-    >
-      <button className={btnClass} title="Copy (Ctrl+C)" onClick={() => onAction('copy')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-      </button>
-      <button className={btnClass} title="Cut (Ctrl+X)" onClick={() => onAction('cut')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
-      </button>
-      <button className={btnClass} title="Duplicate (Ctrl+D)" onClick={() => onAction('duplicate')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16V4a2 2 0 012-2h12"/></svg>
-      </button>
-      <button className={btnClass} title="Delete" onClick={() => onAction('delete')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-      </button>
-      <div className={sepClass} />
-      <button className={btnClass} title="Bring Forward" onClick={() => onAction('bring_forward')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="8" height="8" rx="1" opacity=".4"/><rect x="10" y="10" width="12" height="12" rx="1"/></svg>
-      </button>
-      <button className={btnClass} title="Send Backward" onClick={() => onAction('send_backward')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="12" height="12" rx="1"/><rect x="10" y="10" width="8" height="8" rx="1" opacity=".4"/></svg>
-      </button>
-      <button className={btnClass} title="Bring to Front" onClick={() => onAction('bring_to_front')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="10" width="12" height="12" rx="1"/><rect x="10" y="2" width="12" height="12" rx="1" opacity=".4"/><path d="M16 8l4-4m0 0l-4-4m4 4H10"/></svg>
-      </button>
-      <button className={btnClass} title="Send to Back" onClick={() => onAction('send_to_back')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="10" y="2" width="12" height="12" rx="1"/><rect x="2" y="10" width="12" height="12" rx="1" opacity=".4"/><path d="M8 16l-4 4m0 0l4 4m-4-4h10"/></svg>
-      </button>
-      <div className={sepClass} />
-      <button className={btnClass} title="Flip Horizontal" onClick={() => onAction('flip_h')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M16 6l4 6-4 6M8 6L4 12l4 6"/></svg>
-      </button>
-      <button className={btnClass} title="Flip Vertical" onClick={() => onAction('flip_v')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12h20M6 8L12 4l6 4M6 16l6 4 6-4"/></svg>
-      </button>
-      <div className={sepClass} />
-      <button className={btnClass} title="Lock" onClick={() => onAction('lock')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-      </button>
-      <button className={btnClass} title="Unlock" onClick={() => onAction('unlock')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 019.9-1"/></svg>
-      </button>
-      <div className={sepClass} />
-      {selectedShapeIds.length >= 2 && (
-        <button className={btnClass} title="Group (Ctrl+G)" onClick={() => onAction('group')}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="1" width="22" height="22" rx="3" strokeDasharray="4"/><rect x="5" y="5" width="6" height="6" rx="1"/><rect x="13" y="13" width="6" height="6" rx="1"/></svg>
-        </button>
-      )}
-      <button className={btnClass} title="Ungroup (Ctrl+Shift+G)" onClick={() => onAction('ungroup')}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/></svg>
-      </button>
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function CadEditorCanvas({ 
@@ -1230,176 +1140,6 @@ export default function CadEditorCanvas({
     setSelectedShapeIds(newIds);
   };
 
-  const handleToolbarAction = (action) => {
-    if (selectedShapeIds.length === 0) return;
-    
-    if (action === 'delete') {
-      deleteSelectedShape();
-    } else if (action === 'copy' || action === 'cut') {
-      const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)).filter(Boolean);
-      if (shapesToCopy.length > 0) {
-        setClipboard(JSON.parse(JSON.stringify(shapesToCopy)));
-        if (action === 'cut') deleteSelectedShape();
-      }
-    } else if (action === 'duplicate') {
-      const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)).filter(Boolean);
-      shapesToCopy.forEach(s => duplicateShape(JSON.parse(JSON.stringify(s))));
-    } else if (action === 'group') {
-      groupSelected();
-    } else if (action === 'ungroup') {
-      ungroupSelected();
-    } else if (action === 'bring_forward' || action === 'send_backward') {
-      let newShapes = [...documentState.shapes];
-      let changed = false;
-      
-      const reorderInTree = (shapes) => {
-        let localChanged = false;
-        const selectedIndices = shapes.map((s, i) => selectedShapeIds.includes(s.id) ? i : -1).filter(i => i !== -1);
-        
-        if (selectedIndices.length > 0) {
-          if (action === 'bring_forward') {
-            for (let i = selectedIndices.length - 1; i >= 0; i--) {
-              const idx = selectedIndices[i];
-              if (idx < shapes.length - 1) {
-                const temp = shapes[idx];
-                shapes[idx] = shapes[idx + 1];
-                shapes[idx + 1] = temp;
-                localChanged = true;
-              }
-            }
-          } else {
-            for (let i = 0; i < selectedIndices.length; i++) {
-              const idx = selectedIndices[i];
-              if (idx > 0) {
-                const temp = shapes[idx];
-                shapes[idx] = shapes[idx - 1];
-                shapes[idx - 1] = temp;
-                localChanged = true;
-              }
-            }
-          }
-        }
-        
-        for (let i = 0; i < shapes.length; i++) {
-          if (shapes[i].children && shapes[i].children.length > 0) {
-            const childrenChanged = reorderInTree(shapes[i].children);
-            if (childrenChanged) localChanged = true;
-          }
-        }
-        
-        return localChanged;
-      };
-      
-      changed = reorderInTree(newShapes);
-      if (changed) {
-        setDocumentState({ ...documentState, shapes: newShapes });
-        if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
-      }
-    } else if (action === 'bring_to_front' || action === 'send_to_back') {
-      let newShapes = [...documentState.shapes];
-      let changed = false;
-      
-      const reorderToEnds = (shapes) => {
-        let localChanged = false;
-        const selected = shapes.filter(s => selectedShapeIds.includes(s.id));
-        const unselected = shapes.filter(s => !selectedShapeIds.includes(s.id));
-        
-        if (selected.length > 0) {
-          if (action === 'bring_to_front') {
-            shapes.length = 0;
-            shapes.push(...unselected, ...selected);
-            localChanged = true;
-          } else {
-            shapes.length = 0;
-            shapes.push(...selected, ...unselected);
-            localChanged = true;
-          }
-        }
-        
-        for (let i = 0; i < shapes.length; i++) {
-          if (shapes[i].children && shapes[i].children.length > 0) {
-            const childrenChanged = reorderToEnds(shapes[i].children);
-            if (childrenChanged) localChanged = true;
-          }
-        }
-        
-        return localChanged;
-      };
-      
-      changed = reorderToEnds(newShapes);
-      if (changed) {
-        setDocumentState({ ...documentState, shapes: newShapes });
-        if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
-      }
-    } else if (action === 'lock' || action === 'unlock') {
-      let newShapes = [...documentState.shapes];
-      let changed = false;
-      
-      const toggleLock = (shapes) => {
-        for (let i = 0; i < shapes.length; i++) {
-          if (selectedShapeIds.includes(shapes[i].id)) {
-            shapes[i] = { ...shapes[i], attributes: { ...shapes[i].attributes } };
-            if (action === 'lock') {
-              shapes[i].attributes['data-locked'] = 'true';
-            } else {
-              delete shapes[i].attributes['data-locked'];
-            }
-            changed = true;
-          }
-          if (shapes[i].children && shapes[i].children.length > 0) {
-            shapes[i] = { ...shapes[i], children: [...shapes[i].children] };
-            toggleLock(shapes[i].children);
-          }
-        }
-      };
-      
-      toggleLock(newShapes);
-      if (changed) {
-        setDocumentState({ ...documentState, shapes: newShapes });
-        if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
-      }
-    } else if (action === 'flip_h' || action === 'flip_v') {
-      let newShapes = JSON.parse(JSON.stringify(documentState.shapes));
-      let changed = false;
-      
-      const flipShape = (shape, type) => {
-        if (!svgRef.current) return;
-        const el = svgRef.current.querySelector(`#${CSS.escape(shape.id)}`);
-        if (!el) return;
-        try {
-          const bbox = el.getBBox();
-          const cx = bbox.x + bbox.width / 2;
-          const cy = bbox.y + bbox.height / 2;
-          
-          let t = shape.rawTransform || '';
-          if (type === 'flip_h') {
-            t = `translate(${cx}, ${cy}) scale(-1, 1) translate(${-cx}, ${-cy}) ` + t;
-          } else {
-            t = `translate(${cx}, ${cy}) scale(1, -1) translate(${-cx}, ${-cy}) ` + t;
-          }
-          shape.rawTransform = t.trim();
-          changed = true;
-        } catch(e) {}
-      };
-      
-      const applyFlip = (shapes) => {
-        for (const s of shapes) {
-          if (selectedShapeIds.includes(s.id)) {
-            flipShape(s, action);
-          }
-          if (s.children && s.children.length > 0) {
-            applyFlip(s.children);
-          }
-        }
-      };
-      
-      applyFlip(newShapes);
-      if (changed) {
-        setDocumentState({ ...documentState, shapes: newShapes });
-        if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
-      }
-    }
-  };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1749,6 +1489,7 @@ export default function CadEditorCanvas({
   // Resolve a click target to the best shape ID in documentState.
   // Prefers the most specific (deepest) fillable element over parent groups.
   const resolveShapeId = (targetEl) => {
+    if (targetEl.closest('[data-cad-type="background"]')) return null;
     const FILLABLE_TAGS = new Set(['path', 'polyline', 'polygon', 'rect', 'circle', 'ellipse', 'line', 'text', 'tspan', 'use']);
     // First pass: walk up looking for a tracked fillable element (not a <g>)
     let el = targetEl;
@@ -1988,8 +1729,8 @@ export default function CadEditorCanvas({
           }
         
           e.stopPropagation();
-      } else if (tag === 'svg' && selectedShapeIds.length > 0) {
-        // Clicking empty canvas deselects the current object (MS Paint behavior)
+      } else if ((tag === 'svg' || target.closest('[data-cad-type="background"]')) && selectedShapeIds.length > 0) {
+        // Clicking empty canvas or background deselects the current object (MS Paint behavior)
         setSelectedShapeIds([]);
       }
     }
@@ -2109,9 +1850,6 @@ export default function CadEditorCanvas({
     if (onSvgModified) {
       notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
     }
-    setTimeout(() => {
-      setSelectedShapeIds([shapeId]);
-    }, 50);
   };
 
   const commitDrawingCurve = (start, control, end) => {
@@ -2131,7 +1869,6 @@ export default function CadEditorCanvas({
       notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
     }
     setTimeout(() => {
-      setSelectedShapeIds([shapeId]);
       onToolChange?.('pointer');
     }, 50);
   };
@@ -2153,10 +1890,6 @@ export default function CadEditorCanvas({
     const newShapes = [...documentState.shapes, newShape];
     setDocumentState({ ...documentState, shapes: newShapes });
     if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
-
-    setTimeout(() => {
-      setSelectedShapeIds([shapeId]);
-    }, 50);
   };
 
   const commitText = (tInput) => {
@@ -2193,9 +1926,6 @@ export default function CadEditorCanvas({
     if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
 
     setTextInput(null);
-    setTimeout(() => {
-      setSelectedShapeIds([shapeId]);
-    }, 50);
   };
 
   const calculateArrowPath = (start, end, strokeW) => {
@@ -2618,16 +2348,6 @@ export default function CadEditorCanvas({
                 </svg>
               </div>
           )}
-
-          {/* Floating Toolbar */}
-          <CadEditorFloatingToolbar
-            selectedShapeIds={selectedShapeIds}
-            documentState={documentState}
-            containerRef={containerRef}
-            svgRef={svgRef}
-            scale={transform.current.scale}
-            onAction={handleToolbarAction}
-          />
         </div>
         
         {/* Floating Text Input */}

@@ -23,6 +23,23 @@ model CadProject {
   plots       ProjectPlot[]
   amenityPlacements AmenityPlacement[]
   plotStatuses PlotStatus[]
+  boundaries  ProjectBoundary[]
+}
+
+model ProjectBoundary {
+  id          Int         @id @default(autoincrement())
+  projectId   Int
+  project     CadProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String      @default("Boundary")
+  area        Float?
+  pointCount  Int?
+  latMin      Float?
+  latMax      Float?
+  lngMin      Float?
+  lngMax      Float?
+  geoJson     String      // Stores the exact polygon coordinates
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }
 
 model CadConversion {
@@ -40,6 +57,10 @@ model CadConversion {
   layerCount       Int?
   blockCount       Int?
   errorMessage     String?
+  mapLatitude      Float?
+  mapLongitude     Float?
+  mapRotation      Float?      @default(0)
+  mapScale         Float?      @default(1)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   amenityPlacements AmenityPlacement[]

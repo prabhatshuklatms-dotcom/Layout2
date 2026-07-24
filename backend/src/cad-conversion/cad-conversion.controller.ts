@@ -102,6 +102,14 @@ export class CadConversionController {
     return this.cadConversionService.findOne(+id);
   }
 
+  @Get(':id/composite-svg')
+  async getCompositeSvg(@Param('id') id: string, @Res() res: Response) {
+    const svg = await this.cadConversionService.getCompositeSvg(+id);
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(svg);
+  }
+
   @Get(':id/svg')
   async getSvg(@Param('id') id: string, @Res() res: Response) {
     const conversion = await this.cadConversionService.findOne(+id);

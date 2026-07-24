@@ -333,7 +333,7 @@ function SVGWorkspace({ boundary, regions, activeRegionId, onSelectRegion, onReg
 
           {ix.tool===TOOL.CROP_POLY && (
             <span className="text-[10px] text-violet-400/80 italic ml-0.5">
-              Click · Enter or double-click to finish · Esc to cancel
+              Continue placing points. Click the first point to close the polygon, double-click the last point, or press Enter to finish.
             </span>
           )}
           {ix.tool===TOOL.CROP_RECT && (

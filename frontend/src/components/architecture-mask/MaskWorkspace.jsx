@@ -157,7 +157,7 @@ export default function MaskWorkspace() {
       {/* Mini Helper text */}
       {mode !== 'pointer' && (
         <div className="absolute bottom-4 left-4 bg-black/80 px-3 py-1.5 rounded text-xs text-zinc-300 pointer-events-none shadow">
-          Click to add vertices. Double click to finish. Press Esc to cancel.
+          Continue placing points. Click the first point to close the polygon, double-click the last point, or press Enter to finish.
         </div>
       )}
       {mode === 'pointer' && selectedIds.length === 1 && (

@@ -125,9 +125,7 @@ export default function RegionSidebar({ projectId }) {
       {isPoly && (
         <div className="mx-2 mt-2 px-3 py-2 bg-amber-950/40 border border-amber-700/40
                         rounded-lg text-[11px] text-amber-400 leading-relaxed shrink-0">
-          Click to place points around the area boundary.
-          <br/>
-          <span className="text-amber-600">Double-click</span> or press <span className="text-amber-600">Enter</span> to finish · <span className="text-amber-600">Esc</span> to cancel
+          Continue placing points. Click the first point to close the polygon, double-click the last point, or press Enter to finish.
         </div>
       )}
 

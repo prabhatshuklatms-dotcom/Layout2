@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -52,8 +52,9 @@ export async function deleteCadProject(id) {
 }
 
 // ─── CAD Conversions ────────────────────────────────────────────────────────
-export async function getCadConversions() {
-  return request('/api/cad-conversion');
+export async function getCadConversions(projectId) {
+  const query = projectId ? `?projectId=${projectId}` : '';
+  return request(`/api/cad-conversion${query}`);
 }
 
 export async function deleteCadConversion(id) {
@@ -64,6 +65,13 @@ export async function renameCadConversion(id, newName) {
   return request(`/api/cad-conversion/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ originalFileName: newName })
+  });
+}
+
+export async function updateCadConversion(id, data) {
+  return request(`/api/cad-conversion/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
   });
 }
 
@@ -177,4 +185,28 @@ export async function updateProjectPlotStatus(projectId, id, body) {
 
 export async function deleteProjectPlotStatus(projectId, id) {
   return request(`/api/plot-statuses/project/${projectId}/${id}`, { method: 'DELETE' });
+}
+
+// --- Project Boundaries ---
+
+export async function getProjectBoundaries(projectId) {
+  return request(`/api/projects/${projectId}/boundaries`);
+}
+
+export async function createProjectBoundary(projectId, data) {
+  return request(`/api/projects/${projectId}/boundaries`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateProjectBoundary(id, data) {
+  return request(`/api/boundary/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteProjectBoundary(id) {
+  return request(`/api/boundary/${id}`, { method: 'DELETE' });
 }

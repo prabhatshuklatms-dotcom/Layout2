@@ -127,7 +127,7 @@ function Toolbar({
           <span className="text-[10px] text-amber-500/80 italic ml-0.5">Drag to draw · Handles to resize · Drag again to redraw</span>
         )}
         {tool===TOOL.CROP_POLY && (
-          <span className="text-[10px] text-violet-400/80 italic ml-0.5">Click points · Enter or dbl-click to finish · Esc cancel</span>
+          <span className="text-[10px] text-violet-400/80 italic ml-0.5">Continue placing points. Click the first point to close the polygon, double-click the last point, or press Enter to finish.</span>
         )}
 
         {hasCrop && (

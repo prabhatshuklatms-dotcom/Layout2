@@ -1255,7 +1255,7 @@ export default function LeafletMapView({
       {tool===TOOL.CROP_POLY && activeRegionId && polyCount===0 && !cropsRef.current[activeRegionId] && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[9000] pointer-events-none
                         bg-zinc-950/90 backdrop-blur border border-violet-700/60 rounded-lg px-3 py-1.5 text-[11px] text-violet-300">
-          Click to place polygon points · Enter or double-click to finish · Esc to cancel
+          Continue placing points. Click the first point to close the polygon, double-click the last point, or press Enter to finish.
         </div>
       )}
 

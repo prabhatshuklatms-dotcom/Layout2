@@ -1,1 +1,0 @@
-const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); prisma.cadConversion.findFirst({ orderBy: { createdAt: 'desc' } }).then(c => console.log('ERROR:', c.errorMessage)).finally(() => prisma.$disconnect());

@@ -335,7 +335,7 @@ export default function MapWorkspace({ projectId, onClose }) {
                             bg-zinc-950/95 backdrop-blur border border-zinc-700
                             rounded-xl px-4 py-2.5 text-sm text-zinc-300 pointer-events-none">
               {drawMode === BOUNDARY_DRAW_MODE.POLYGON
-                ? 'Click to add points · Double-click or Enter to finish · Esc to cancel'
+                ? 'Continue placing points. Click the first point to close the polygon, double-click the last point, or press Enter to finish.'
                 : 'Click and drag to draw rectangle · Esc to cancel'}
             </div>
           )}
