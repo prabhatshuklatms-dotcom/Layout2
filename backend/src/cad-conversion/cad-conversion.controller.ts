@@ -104,10 +104,9 @@ export class CadConversionController {
 
   @Get(':id/composite-svg')
   async getCompositeSvg(@Param('id') id: string, @Res() res: Response) {
-    const svg = await this.cadConversionService.getCompositeSvg(+id);
-    res.setHeader('Content-Type', 'image/svg+xml');
+    const data = await this.cadConversionService.getCompositeSvg(+id);
     res.setHeader('Cache-Control', 'no-cache');
-    res.send(svg);
+    res.json(data);
   }
 
   @Get(':id/svg')

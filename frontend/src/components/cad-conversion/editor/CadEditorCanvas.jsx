@@ -83,7 +83,7 @@ function pbComputeArea(el) {
       }
       return Math.abs(area / 2);
     }
-  } catch (_) {}
+  } catch (_) { }
   // Fallback
   try { const bb = el.getBBox(); return bb.width * bb.height; } catch (_) { return Infinity; }
 }
@@ -113,7 +113,7 @@ function pbComputeCentroid(el) {
         const bb = el.getBBox();
         return { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
       }
-      
+
       let signedArea = 0;
       let cx = 0;
       let cy = 0;
@@ -127,17 +127,17 @@ function pbComputeCentroid(el) {
       }
       signedArea *= 0.5;
       if (Math.abs(signedArea) < 1e-4) {
-         const bb = el.getBBox();
-         return { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
+        const bb = el.getBBox();
+        return { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
       }
       return { x: cx / (6 * signedArea), y: cy / (6 * signedArea) };
     }
-  } catch(e) {}
-  
+  } catch (e) { }
+
   try {
     const bb = el.getBBox();
     return { x: bb.x + bb.width / 2, y: bb.y + bb.height / 2 };
-  } catch(e) {
+  } catch (e) {
     return { x: 0, y: 0 };
   }
 }
@@ -149,7 +149,7 @@ function pbComputeCentroid(el) {
 function cadHitTestRegion(svgEl, clientX, clientY) {
   const VALID_TAGS = ['path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse', 'line', 'text', 'tspan', 'use'];
   const candidates = [];
-  
+
   let svgPtRoot;
   try {
     const pt = svgEl.createSVGPoint();
@@ -165,47 +165,47 @@ function cadHitTestRegion(svgEl, clientX, clientY) {
       if (el.getAttribute('data-cad-type') === 'hatch' || el.getAttribute('data-cad-type') === 'background' || el.closest('.cad-overlay') || el.style.pointerEvents === 'none' || el.getAttribute('pointer-events') === 'none') {
         return;
       }
-      
+
       try {
         let isHit = false;
-        
+
         // Strategy 1: Use native isPointInFill if available (fastest, but coordinate system can be tricky)
         // Some browsers want client coords, some want user coords. We'll pass the DOMPoint as client coords.
         if (el.isPointInFill && typeof DOMPoint !== 'undefined') {
           const pt = new DOMPoint(clientX, clientY);
           if (el.isPointInFill(pt)) isHit = true;
           if (!isHit && el.isPointInStroke) {
-             if (el.isPointInStroke(pt)) isHit = true;
+            if (el.isPointInStroke(pt)) isHit = true;
           }
         }
-        
+
         // Strategy 2: If isPointInFill failed or is false, try our robust local-space raycasting
         // This flawlessly handles nested `<g>` transforms because getPointAtLength and getScreenCTM 
         // are strictly in the element's local space.
         if (!isHit && pbIsClosed(el)) {
-           const sctm = el.getScreenCTM();
-           if (sctm) {
-             const pt = svgEl.createSVGPoint();
-             pt.x = clientX; pt.y = clientY;
-             const localPt = pt.matrixTransform(sctm.inverse());
-             const pts = pbSamplePoints(el);
-             if (pts && pts.length >= 3 && pbPointInPoly(localPt.x, localPt.y, pts)) {
-               isHit = true;
-             }
-           }
+          const sctm = el.getScreenCTM();
+          if (sctm) {
+            const pt = svgEl.createSVGPoint();
+            pt.x = clientX; pt.y = clientY;
+            const localPt = pt.matrixTransform(sctm.inverse());
+            const pts = pbSamplePoints(el);
+            if (pts && pts.length >= 3 && pbPointInPoly(localPt.x, localPt.y, pts)) {
+              isHit = true;
+            }
+          }
         }
 
         // Strategy 3: Bounding box hit testing for hollow shapes or newly added tags (line, text, use)
         if (!isHit) {
-           const fill = el.getAttribute('fill');
-           const tagLower = el.tagName.toLowerCase();
-           if (!fill || fill === 'none' || fill === 'transparent' || ['line', 'text', 'tspan', 'use'].includes(tagLower)) {
-              const rect = el.getBoundingClientRect();
-              // Add a small 2px padding to make it easier to select thin lines/strokes
-              if (clientX >= rect.left - 2 && clientX <= rect.right + 2 && clientY >= rect.top - 2 && clientY <= rect.bottom + 2) {
-                 isHit = true;
-              }
-           }
+          const fill = el.getAttribute('fill');
+          const tagLower = el.tagName.toLowerCase();
+          if (!fill || fill === 'none' || fill === 'transparent' || ['line', 'text', 'tspan', 'use'].includes(tagLower)) {
+            const rect = el.getBoundingClientRect();
+            // Add a small 2px padding to make it easier to select thin lines/strokes
+            if (clientX >= rect.left - 2 && clientX <= rect.right + 2 && clientY >= rect.top - 2 && clientY <= rect.bottom + 2) {
+              isHit = true;
+            }
+          }
         }
 
         if (isHit) {
@@ -217,9 +217,9 @@ function cadHitTestRegion(svgEl, clientX, clientY) {
               let tArea = 0;
               const n = pts.length;
               const transformedPts = pts.map(p => {
-                 const pt = svgEl.createSVGPoint();
-                 pt.x = p.x; pt.y = p.y;
-                 return pt.matrixTransform(sctm);
+                const pt = svgEl.createSVGPoint();
+                pt.x = p.x; pt.y = p.y;
+                return pt.matrixTransform(sctm);
               });
               for (let i = 0; i < n; i++) {
                 const j = (i + 1) % n;
@@ -231,14 +231,14 @@ function cadHitTestRegion(svgEl, clientX, clientY) {
               const rect = el.getBoundingClientRect();
               area = rect.width * rect.height;
             }
-          } catch(e) {
+          } catch (e) {
             const rect = el.getBoundingClientRect();
             area = rect.width * rect.height;
           }
-          
+
           candidates.push({ element: el, area });
         }
-      } catch (err) {}
+      } catch (err) { }
     });
   }
 
@@ -249,13 +249,13 @@ function cadHitTestRegion(svgEl, clientX, clientY) {
   candidates.sort((a, b) => a.area - b.area);
 
   const best = candidates[0].element;
-  
+
   // Debug Log
   console.log('[HitTest] Selected Region:', best.tagName, best.id || '(no id)');
   console.log('[HitTest] Selection Reason: Smallest containing valid region. Area:', candidates[0].area.toFixed(2));
   if (best.getScreenCTM) {
-     const t = best.getScreenCTM();
-     console.log(`[HitTest] Transform Matrix: [a: ${t.a.toFixed(2)}, b: ${t.b.toFixed(2)}, c: ${t.c.toFixed(2)}, d: ${t.d.toFixed(2)}, e: ${t.e.toFixed(2)}, f: ${t.f.toFixed(2)}]`);
+    const t = best.getScreenCTM();
+    console.log(`[HitTest] Transform Matrix: [a: ${t.a.toFixed(2)}, b: ${t.b.toFixed(2)}, c: ${t.c.toFixed(2)}, d: ${t.d.toFixed(2)}, e: ${t.e.toFixed(2)}, f: ${t.f.toFixed(2)}]`);
   }
 
   return { element: best, area: candidates[0].area, allCandidates: candidates };
@@ -351,9 +351,9 @@ function paintBucketFindRegion(svgEl, clientX, clientY) {
   containing.sort((a, b) => a.area - b.area);
 
   return {
-    element:       containing[0].element,
-    area:          containing[0].area,
-    bbox:          containing[0].bbox,
+    element: containing[0].element,
+    area: containing[0].area,
+    bbox: containing[0].bbox,
     allCandidates: containing,
     totalClosed,
   };
@@ -397,7 +397,7 @@ function pbSamplePoints(el) {
   if (tag === 'circle') {
     const cx = parseFloat(el.getAttribute('cx') || 0);
     const cy = parseFloat(el.getAttribute('cy') || 0);
-    const r  = parseFloat(el.getAttribute('r') || 0);
+    const r = parseFloat(el.getAttribute('r') || 0);
     for (let i = 0; i < 64; i++) {
       const a = (2 * Math.PI * i) / 64;
       pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
@@ -454,11 +454,11 @@ function paintBucketExtractGeometry(el, svgEl) {
   // SVG-root-userspace, so we multiply el.getCTM() by svgEl.getCTM()⁻¹.
   let transformStr = '';
   try {
-    const elCTM  = el.getCTM();
+    const elCTM = el.getCTM();
     const svgCTM = svgEl.getCTM();
     if (elCTM && svgCTM) {
       const inv = svgCTM.inverse();
-      const m   = inv.multiply(elCTM);
+      const m = inv.multiply(elCTM);
       // Only emit a matrix() if it's not the identity
       const isIdentity =
         Math.abs(m.a - 1) < 1e-6 && Math.abs(m.b) < 1e-6 &&
@@ -519,7 +519,7 @@ function paintBucketExtractGeometry(el, svgEl) {
       if (!attrs.rx || !attrs.ry) return null;
       return { type: 'ellipse', attributes: attrs, transform: transformStr };
     }
-  } catch (_) {}
+  } catch (_) { }
   return null;
 }
 
@@ -540,9 +540,9 @@ function offsetShapeAttrs(shape, dx, dy) {
     const pts = (a.points || '').trim().split(/[\s,]+/);
     const moved = [];
     for (let i = 0; i < pts.length; i += 2) {
-      if (pts[i] && pts[i+1]) {
+      if (pts[i] && pts[i + 1]) {
         moved.push(parseFloat(pts[i]) + dx);
-        moved.push(parseFloat(pts[i+1]) + dy);
+        moved.push(parseFloat(pts[i + 1]) + dy);
       }
     }
     a.points = moved.join(' ');
@@ -563,9 +563,9 @@ function offsetShapeAttrs(shape, dx, dy) {
     for (let i = 0; i < tokens.length; i++) {
       const cmd = tokens.slice(0, i + 1).filter(t => /^[a-zA-Z]$/.test(t)).pop();
       if (cmd && cmd === cmd.toLowerCase() && cmd !== 'm' && cmd !== 'z') continue; // skip relative commands
-      if (!isNaN(tokens[i]) && i + 1 < tokens.length && !isNaN(tokens[i+1])) {
+      if (!isNaN(tokens[i]) && i + 1 < tokens.length && !isNaN(tokens[i + 1])) {
         tokens[i] = parseFloat(tokens[i]) + dx;
-        tokens[i+1] = parseFloat(tokens[i+1]) + dy;
+        tokens[i + 1] = parseFloat(tokens[i + 1]) + dy;
         i++;
       }
     }
@@ -588,7 +588,7 @@ function MultiSelectOverlay({ selectedShapeIds, documentState, svgRef, scale }) 
           const b = el.getBBox();
           minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
           maxX = Math.max(maxX, b.x + b.width); maxY = Math.max(maxY, b.y + b.height);
-        } catch(_) {}
+        } catch (_) { }
       }
     }
     if (minX !== Infinity) {
@@ -602,7 +602,7 @@ function MultiSelectOverlay({ selectedShapeIds, documentState, svgRef, scale }) 
 
   const svgEl = svgRef.current?.querySelector('svg');
   let actualScale = scale;
-  try { actualScale = svgEl?.getScreenCTM()?.a || scale; } catch(_) {}
+  try { actualScale = svgEl?.getScreenCTM()?.a || scale; } catch (_) { }
   const sw = 1.5 / actualScale;
 
   return (
@@ -610,7 +610,7 @@ function MultiSelectOverlay({ selectedShapeIds, documentState, svgRef, scale }) 
       <rect
         x={bbox.x} y={bbox.y} width={bbox.width} height={bbox.height}
         fill="rgba(59,130,246,0.06)" stroke="#3b82f6" strokeWidth={sw}
-        strokeDasharray={`${4/actualScale}`}
+        strokeDasharray={`${4 / actualScale}`}
       />
     </g>
   );
@@ -625,7 +625,7 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
     if (!svgRef.current || !plots || plots.length === 0) {
       setLabels([]); return;
     }
-    
+
     // We need to recursively find shapes with data-plot-id
     const findPlotShapes = (shapes, result = []) => {
       for (const s of shapes) {
@@ -638,7 +638,7 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
       }
       return result;
     };
-    
+
     const plotShapes = findPlotShapes(documentState.shapes);
     if (plotShapes.length === 0) {
       setLabels([]); return;
@@ -651,10 +651,10 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
       if (el && plot) {
         try {
           const c = pbComputeCentroid(el);
-          
+
           const dx = parseFloat(attributes['data-label-dx'] || 0);
           const dy = parseFloat(attributes['data-label-dy'] || 0);
-          
+
           newLabels.push({
             id,
             plot,
@@ -664,7 +664,7 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
             baseX: c.x,
             baseY: c.y,
           });
-        } catch(_) {}
+        } catch (_) { }
       }
     }
     setLabels(newLabels);
@@ -677,22 +677,22 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
       if (!svgRef.current) return;
       const svgEl = svgRef.current.querySelector('svg');
       if (!svgEl) return;
-      
+
       const pt = svgEl.createSVGPoint();
       pt.x = e.clientX;
       pt.y = e.clientY;
       const svgP = pt.matrixTransform(svgEl.getScreenCTM().inverse());
-      
+
       const currentDx = svgP.x - dragState.startX;
       const currentDy = svgP.y - dragState.startY;
-      
+
       setDragState(prev => ({ ...prev, currentDx, currentDy }));
     };
 
     const handlePointerUp = () => {
       if (dragState.currentDx !== 0 || dragState.currentDy !== 0) {
         onLabelDragEnd(
-          dragState.id, 
+          dragState.id,
           dragState.initialDx + dragState.currentDx,
           dragState.initialDy + dragState.currentDy
         );
@@ -712,13 +712,13 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
 
   const svgEl = svgRef.current?.querySelector('svg');
   let actualScale = scale;
-  try { actualScale = svgEl?.getScreenCTM()?.a || scale; } catch(_) {}
+  try { actualScale = svgEl?.getScreenCTM()?.a || scale; } catch (_) { }
 
   return (
     <g>
       {labels.map((label) => {
         const { id, plot, attributes, x, y, baseX, baseY } = label;
-        
+
         // Active drag overrides
         let renderX = x;
         let renderY = y;
@@ -735,11 +735,11 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
         const showHeight = attributes['data-label-show-height'] !== 'false';
         const rotationAttr = parseFloat(attributes['data-label-rotation'] || 0);
         const alignAttr = attributes['data-label-align'] || 'middle';
-        
+
         const baseFontSize = fontSizeAttr / actualScale;
-        
+
         let textX = 0;
-        
+
         let lines = [];
         lines.push({ text: plot.plotNumber || '?', size: baseFontSize * 1.5, weight: 'bold', color });
         if (showArea) {
@@ -754,21 +754,21 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
           lines.push({ text: 'Height', size: baseFontSize * 0.6, weight: 'normal', color, dy: baseFontSize * 0.4 });
           lines.push({ text: `${plot.height} m`, size: baseFontSize * 0.85, weight: 'bold', color });
         }
-        
+
         let currentY = 0;
         lines.forEach(l => {
-           if (l.dy) currentY += l.dy;
-           l.y = currentY;
-           currentY += l.size * 1.3;
+          if (l.dy) currentY += l.dy;
+          l.y = currentY;
+          currentY += l.size * 1.3;
         });
         const totalHeight = currentY;
         lines.forEach(l => {
-           l.y -= (totalHeight / 2) - (l.size * 0.4); // center vertically
+          l.y -= (totalHeight / 2) - (l.size * 0.4); // center vertically
         });
 
         return (
-          <g 
-            key={`label-${id}`} 
+          <g
+            key={`label-${id}`}
             transform={`translate(${renderX}, ${renderY}) rotate(${rotationAttr})`}
             className="cursor-move"
             onPointerDown={(e) => {
@@ -780,7 +780,7 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
               pt.x = e.clientX;
               pt.y = e.clientY;
               const svgP = pt.matrixTransform(svgEl.getScreenCTM().inverse());
-              
+
               setDragState({
                 id,
                 startX: svgP.x,
@@ -793,13 +793,13 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
             }}
           >
             {lines.map((l, i) => (
-              <text 
+              <text
                 key={i}
                 x={textX}
                 textAnchor={alignAttr}
-                fill={l.color} 
-                fontSize={l.size} 
-                fontWeight={l.weight} 
+                fill={l.color}
+                fontSize={l.size}
+                fontWeight={l.weight}
                 fontFamily={fontFam}
                 y={l.y}
                 style={{ pointerEvents: 'none' }}
@@ -817,19 +817,19 @@ function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function CadEditorCanvas({ 
-  svgContent, 
-  activeTool, 
-  strokeWidth = 2, 
-  eraserSize = 10, 
-  fillColor = '#3b82f6', 
-  fillOpacity = 1.0, 
-  plots, 
-  statuses, 
-  onZoomChange, 
-  onCoordsChange, 
-  onSvgModified, 
-  onToolChange, 
+export default function CadEditorCanvas({
+  svgContent,
+  activeTool,
+  strokeWidth = 2,
+  eraserSize = 10,
+  fillColor = '#3b82f6',
+  fillOpacity = 1.0,
+  plots,
+  statuses,
+  onZoomChange,
+  onCoordsChange,
+  onSvgModified,
+  onToolChange,
   onSelectionChange,
   onLabelDragEnd,
   masterAmenities = [],
@@ -863,7 +863,7 @@ export default function CadEditorCanvas({
   const [drawEnd, setDrawEnd] = useState(null);
   const [drawPoints, setDrawPoints] = useState([]);
   const [textInput, setTextInput] = useState(null);
-  
+
   // Selection & Transform state
   const [selectedShapeIds, setSelectedShapeIds] = useState([]);
   const [selectedPlacementIds, setSelectedPlacementIds] = useState([]);
@@ -929,18 +929,18 @@ export default function CadEditorCanvas({
     const rect = containerRef.current.getBoundingClientRect();
     const x = (clientX - rect.left - transform.current.x) / transform.current.scale;
     const y = (clientY - rect.top - transform.current.y) / transform.current.scale;
-    return { x, y: -y }; 
+    return { x, y: -y };
   };
 
   const getSvgInternalCoords = (clientX, clientY) => {
     if (!svgRef.current) return null;
     const svgEl = svgRef.current.querySelector('svg');
     if (!svgEl) return null;
-    
+
     const pt = svgEl.createSVGPoint();
     pt.x = clientX;
     pt.y = clientY;
-    
+
     try {
       const ctm = svgEl.getScreenCTM();
       if (!ctm) return null;
@@ -980,7 +980,7 @@ export default function CadEditorCanvas({
     transform.current.x = px - (px - transform.current.x) * deltaScale;
     transform.current.y = py - (py - transform.current.y) * deltaScale;
     transform.current.scale = newScale;
-    
+
     requestUpdate();
   };
 
@@ -1091,13 +1091,13 @@ export default function CadEditorCanvas({
     const newId = `cad-shape-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const offsetShape = offsetShapeAttrs(JSON.parse(JSON.stringify(shapeObj)), 20, 20);
     const newShape = { ...offsetShape, id: newId };
-    
+
     setDocumentState(prev => {
       const newShapes = [...prev.shapes, newShape];
       if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, prev.viewBox));
       return { ...prev, shapes: newShapes };
     });
-    
+
     setTimeout(() => {
       onToolChange?.('pointer');
       setSelectedShapeIds([newId]);
@@ -1169,7 +1169,7 @@ export default function CadEditorCanvas({
 
       // ── Partial Delete: Delete key commits the deletion ────────────────
       if (activeTool === 'partial_delete' && pdHits.length > 0 &&
-          (e.key === 'Delete' || e.key === 'Backspace')) {
+        (e.key === 'Delete' || e.key === 'Backspace')) {
         e.preventDefault();
         let newShapes = [...documentState.shapes];
 
@@ -1255,7 +1255,7 @@ export default function CadEditorCanvas({
         if (e.key === 'Delete' || e.key === 'Backspace') {
           deleteSelectedShape();
         }
-        
+
         if (e.ctrlKey || e.metaKey) {
           if (e.key === 'c') {
             e.preventDefault();
@@ -1303,7 +1303,7 @@ export default function CadEditorCanvas({
         isDragging.current = false;
       }
     };
-    
+
     const handlePolygonComplete = (e) => {
       if ((e.key === 'Enter' || e.key === 'Escape') && drawPoints.length > 1) {
         commitDrawingPolygon(drawPoints);
@@ -1314,7 +1314,7 @@ export default function CadEditorCanvas({
         setCurrentDrawCoords(null);
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keydown', handlePolygonComplete);
     window.addEventListener('keyup', handleKeyUp);
@@ -1327,7 +1327,7 @@ export default function CadEditorCanvas({
 
   const performVectorErase = (coords) => {
     const circle = { cx: coords.x, cy: coords.y, r: eraserSize || 1 };
-    
+
     setDocumentState(prev => {
       const processTree = (shapes) => {
         let treeChanged = false;
@@ -1355,9 +1355,9 @@ export default function CadEditorCanvas({
         }
         return { newShapes: result, changed: treeChanged };
       };
-      
+
       const { newShapes, changed } = processTree(prev.shapes);
-      
+
       if (changed) {
         setVeModified(true);
         return { ...prev, shapes: newShapes };
@@ -1561,7 +1561,7 @@ export default function CadEditorCanvas({
       try {
         const sCTM = svgEl.getScreenCTM();
         console.log('[PaintBucket] svgEl.getScreenCTM():', sCTM ? `a=${sCTM.a.toFixed(4)} b=${sCTM.b.toFixed(4)} c=${sCTM.c.toFixed(4)} d=${sCTM.d.toFixed(4)} e=${sCTM.e.toFixed(2)} f=${sCTM.f.toFixed(2)}` : 'null');
-      } catch (_) {}
+      } catch (_) { }
       console.log('[PaintBucket] viewBox:', documentState.viewBox);
 
       // Find the smallest closed region containing the click (Shoelace area sort)
@@ -1595,19 +1595,19 @@ export default function CadEditorCanvas({
       console.log('[PaintBucket] Bounding Box:', `${bbox.w.toFixed(1)}×${bbox.h.toFixed(1)}`);
 
       // ── Boundary highlight (350ms flash) ───────────────────────────────
-      const prevStroke        = boundaryEl.getAttribute('stroke');
-      const prevStrokeWidth   = boundaryEl.getAttribute('stroke-width');
+      const prevStroke = boundaryEl.getAttribute('stroke');
+      const prevStrokeWidth = boundaryEl.getAttribute('stroke-width');
       const prevStrokeOpacity = boundaryEl.getAttribute('stroke-opacity');
       boundaryEl.setAttribute('stroke', '#facc15');
       boundaryEl.setAttribute('stroke-width', '3');
       boundaryEl.setAttribute('stroke-opacity', '1');
       setTimeout(() => {
-        if (prevStroke === null)        boundaryEl.removeAttribute('stroke');
-        else                            boundaryEl.setAttribute('stroke', prevStroke);
-        if (prevStrokeWidth === null)   boundaryEl.removeAttribute('stroke-width');
-        else                            boundaryEl.setAttribute('stroke-width', prevStrokeWidth);
+        if (prevStroke === null) boundaryEl.removeAttribute('stroke');
+        else boundaryEl.setAttribute('stroke', prevStroke);
+        if (prevStrokeWidth === null) boundaryEl.removeAttribute('stroke-width');
+        else boundaryEl.setAttribute('stroke-width', prevStrokeWidth);
         if (prevStrokeOpacity === null) boundaryEl.removeAttribute('stroke-opacity');
-        else                            boundaryEl.setAttribute('stroke-opacity', prevStrokeOpacity);
+        else boundaryEl.setAttribute('stroke-opacity', prevStrokeOpacity);
       }, 350);
 
       // ── Extract exact geometry (never approximate) ──────────────────────
@@ -1628,9 +1628,9 @@ export default function CadEditorCanvas({
       const boundaryRef = boundaryEl.id || '';
       const existingIdx = boundaryRef
         ? documentState.shapes.findIndex(
-            s => s.attributes?.['data-cad-type'] === 'hatch' &&
-                 s.attributes?.['data-boundary-ref'] === boundaryRef
-          )
+          s => s.attributes?.['data-cad-type'] === 'hatch' &&
+            s.attributes?.['data-boundary-ref'] === boundaryRef
+        )
         : -1;
 
       if (existingIdx !== -1) {
@@ -1674,31 +1674,31 @@ export default function CadEditorCanvas({
       e.stopPropagation();
     } else if (e.button === 0) {
       let shapeId = null;
-      
+
       if (activeTool === 'pointer') {
-         const svgEl = svgRef.current?.querySelector('svg');
-         if (svgEl) {
-           const hit = cadHitTestRegion(svgEl, e.clientX, e.clientY);
-           if (hit) {
-              const boundaryEl = hit.element;
-              shapeId = boundaryEl.id;
-              
-              const prevStroke        = boundaryEl.getAttribute('stroke');
-              const prevStrokeWidth   = boundaryEl.getAttribute('stroke-width');
-              const prevStrokeOpacity = boundaryEl.getAttribute('stroke-opacity');
-              boundaryEl.setAttribute('stroke', '#facc15');
-              boundaryEl.setAttribute('stroke-width', '3');
-              boundaryEl.setAttribute('stroke-opacity', '1');
-              setTimeout(() => {
-                if (prevStroke === null)        boundaryEl.removeAttribute('stroke');
-                else                            boundaryEl.setAttribute('stroke', prevStroke);
-                if (prevStrokeWidth === null)   boundaryEl.removeAttribute('stroke-width');
-                else                            boundaryEl.setAttribute('stroke-width', prevStrokeWidth);
-                if (prevStrokeOpacity === null) boundaryEl.removeAttribute('stroke-opacity');
-                else                            boundaryEl.setAttribute('stroke-opacity', prevStrokeOpacity);
-              }, 350);
-           }
-         }
+        const svgEl = svgRef.current?.querySelector('svg');
+        if (svgEl) {
+          const hit = cadHitTestRegion(svgEl, e.clientX, e.clientY);
+          if (hit) {
+            const boundaryEl = hit.element;
+            shapeId = boundaryEl.id;
+
+            const prevStroke = boundaryEl.getAttribute('stroke');
+            const prevStrokeWidth = boundaryEl.getAttribute('stroke-width');
+            const prevStrokeOpacity = boundaryEl.getAttribute('stroke-opacity');
+            boundaryEl.setAttribute('stroke', '#facc15');
+            boundaryEl.setAttribute('stroke-width', '3');
+            boundaryEl.setAttribute('stroke-opacity', '1');
+            setTimeout(() => {
+              if (prevStroke === null) boundaryEl.removeAttribute('stroke');
+              else boundaryEl.setAttribute('stroke', prevStroke);
+              if (prevStrokeWidth === null) boundaryEl.removeAttribute('stroke-width');
+              else boundaryEl.setAttribute('stroke-width', prevStrokeWidth);
+              if (prevStrokeOpacity === null) boundaryEl.removeAttribute('stroke-opacity');
+              else boundaryEl.setAttribute('stroke-opacity', prevStrokeOpacity);
+            }, 350);
+          }
+        }
       }
 
       if (!shapeId && isShape) {
@@ -1711,24 +1711,24 @@ export default function CadEditorCanvas({
         } else {
           setSelectedShapeIds([shapeId]);
         }
-        
-          // Double click to edit text
-          if ((tag === 'text' || tag === 'tspan') && e.detail === 2) {
-            const shape = findShapeDeep(documentState.shapes, shapeId);
-            if (shape) {
-              const internalCoords = getSvgInternalCoords(e.clientX, e.clientY);
-              setTextInput({
-                 x: shape.attributes.x || (internalCoords ? internalCoords.x : 0),
-                 y: shape.attributes.y || (internalCoords ? internalCoords.y : 0),
-                 value: shape.textContent || '',
-                 screenX: e.clientX,
-                 screenY: e.clientY - 10,
-                 editingShapeId: shape.id
-              });
-            }
+
+        // Double click to edit text
+        if ((tag === 'text' || tag === 'tspan') && e.detail === 2) {
+          const shape = findShapeDeep(documentState.shapes, shapeId);
+          if (shape) {
+            const internalCoords = getSvgInternalCoords(e.clientX, e.clientY);
+            setTextInput({
+              x: shape.attributes.x || (internalCoords ? internalCoords.x : 0),
+              y: shape.attributes.y || (internalCoords ? internalCoords.y : 0),
+              value: shape.textContent || '',
+              screenX: e.clientX,
+              screenY: e.clientY - 10,
+              editingShapeId: shape.id
+            });
           }
-        
-          e.stopPropagation();
+        }
+
+        e.stopPropagation();
       } else if ((tag === 'svg' || target.closest('[data-cad-type="background"]')) && selectedShapeIds.length > 0) {
         // Clicking empty canvas or background deselects the current object (MS Paint behavior)
         setSelectedShapeIds([]);
@@ -1745,7 +1745,7 @@ export default function CadEditorCanvas({
         setCurrentDrawCoords(internalCoords);
       }
     }
-    
+
     if (drawPoints.length > 0 && activeTool === 'draw_polygon') {
       const internalCoords = getSvgInternalCoords(e.clientX, e.clientY);
       if (internalCoords) {
@@ -1846,7 +1846,7 @@ export default function CadEditorCanvas({
 
     const newShapes = [...documentState.shapes, newShape];
     setDocumentState({ ...documentState, shapes: newShapes });
-    
+
     if (onSvgModified) {
       notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
     }
@@ -1864,7 +1864,7 @@ export default function CadEditorCanvas({
 
     const newShapes = [...documentState.shapes, newShape];
     setDocumentState({ ...documentState, shapes: newShapes });
-    
+
     if (onSvgModified) {
       notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
     }
@@ -1875,10 +1875,10 @@ export default function CadEditorCanvas({
 
   const commitDrawingPolygon = (points) => {
     if (points.length < 2) return;
-    
+
     const shapeId = `cad-shape-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const pointsStr = points.map(p => `${p.x},${p.y}`).join(' ');
-    
+
     const newShape = {
       id: shapeId,
       type: 'polyline',
@@ -1886,7 +1886,7 @@ export default function CadEditorCanvas({
       transform: { tx: 0, ty: 0, rot: 0, sx: 1, sy: 1 },
       children: []
     };
-    
+
     const newShapes = [...documentState.shapes, newShape];
     setDocumentState({ ...documentState, shapes: newShapes });
     if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
@@ -1897,18 +1897,18 @@ export default function CadEditorCanvas({
       setTextInput(null);
       return;
     }
-    
+
     if (tInput.editingShapeId) {
-       const newShapes = documentState.shapes.map(s => {
-         if (s.id === tInput.editingShapeId) {
-           return { ...s, textContent: tInput.value };
-         }
-         return s;
-       });
-       setDocumentState({ ...documentState, shapes: newShapes });
-       if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
-       setTextInput(null);
-       return;
+      const newShapes = documentState.shapes.map(s => {
+        if (s.id === tInput.editingShapeId) {
+          return { ...s, textContent: tInput.value };
+        }
+        return s;
+      });
+      setDocumentState({ ...documentState, shapes: newShapes });
+      if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
+      setTextInput(null);
+      return;
     }
 
     const shapeId = `cad-shape-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -1920,7 +1920,7 @@ export default function CadEditorCanvas({
       transform: { tx: 0, ty: 0, rot: 0, sx: 1, sy: 1 },
       children: []
     };
-    
+
     const newShapes = [...documentState.shapes, newShape];
     setDocumentState({ ...documentState, shapes: newShapes });
     if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
@@ -1933,7 +1933,7 @@ export default function CadEditorCanvas({
     const dist = Math.hypot(end.x - start.x, end.y - start.y);
     const headLen = Math.min(strokeW * 10, dist * 0.3);
     const angleOffset = Math.PI / 6;
-    
+
     const head1 = {
       x: end.x - headLen * Math.cos(angle - angleOffset),
       y: end.y - headLen * Math.sin(angle - angleOffset)
@@ -1953,9 +1953,9 @@ export default function CadEditorCanvas({
       const dx = internalCoords.x - drawEnd.x;
       const dy = internalCoords.y - drawEnd.y;
       const controlPoint = { x: midX + dx, y: midY + dy };
-      
+
       commitDrawingCurve(drawStart, controlPoint, drawEnd);
-      
+
       setDrawStart(null);
       setDrawEnd(null);
       setCurrentDrawCoords(null);
@@ -1966,7 +1966,7 @@ export default function CadEditorCanvas({
 
     if (drawStart && currentDrawCoords && activeTool !== 'draw_curve') {
       const endCoords = getSvgInternalCoords(e.clientX, e.clientY) || currentDrawCoords;
-      
+
       commitDrawing(drawStart, endCoords);
       setDrawStart(null);
       setCurrentDrawCoords(null);
@@ -1996,8 +1996,8 @@ export default function CadEditorCanvas({
       setScale(transform.current.scale * zoomFactor, e.clientX, e.clientY);
     } else if (!e.shiftKey) {
       const delta = e.deltaY < 0 ? 1 : -1;
-      const isTrackpad = Math.abs(e.deltaY) < 50; 
-      
+      const isTrackpad = Math.abs(e.deltaY) < 50;
+
       if (isTrackpad) {
         const zoomFactor = Math.pow(0.995, e.deltaY);
         setScale(transform.current.scale * zoomFactor, e.clientX, e.clientY);
@@ -2136,7 +2136,7 @@ export default function CadEditorCanvas({
           cursor: cell !important;
         }
       `}</style>
-      <div 
+      <div
         ref={containerRef}
         data-tool={activeTool}
         className="w-full h-full relative overflow-hidden"
@@ -2153,47 +2153,47 @@ export default function CadEditorCanvas({
         onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
-        <div 
-          ref={contentRef} 
+        <div
+          ref={contentRef}
           className="absolute inset-0 pointer-events-none flex items-center justify-center origin-top-left"
           style={{ transform: 'translate(0px, 0px) scale(1)', transformOrigin: '0 0' }}
         >
-          <div 
+          <div
             ref={svgRef}
             className={`text-white w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full cad-svg-container ${(activeTool === 'pointer' || activeTool === 'eraser' || activeTool === 'paint_bucket' || activeTool === 'partial_delete' || activeTool === 'vector_eraser' || activeTool === 'draw_line' || activeTool === 'draw_arrow' || activeTool === 'draw_circle' || activeTool === 'draw_polygon' || activeTool === 'draw_curve' || activeTool === 'draw_text') ? 'pointer-events-auto' : 'pointer-events-none'}`}
           >
-             <svg 
-               viewBox={documentState.viewBox} 
-               style={{ shapeRendering: 'geometricPrecision', textRendering: 'geometricPrecision' }} 
-               onPointerDown={handleSvgPointerDown}
-             >
-               {documentState.shapes.map((shape, index) => (
-                 <ShapeRenderer 
-                  key={`${shape.id}-${index}`} 
-                  shape={shape} 
+            <svg
+              viewBox={documentState.viewBox}
+              style={{ shapeRendering: 'geometricPrecision', textRendering: 'geometricPrecision' }}
+              onPointerDown={handleSvgPointerDown}
+            >
+              {documentState.shapes.map((shape, index) => (
+                <ShapeRenderer
+                  key={`${shape.id}-${index}`}
+                  shape={shape}
                   plots={plots}
                   statuses={statuses}
                 />
-               ))}
-               <PlotLabelsOverlay 
-                  documentState={documentState}
-                  svgRef={svgRef}
-                  scale={transform.current.scale}
-                  plots={plots}
-                  onLabelDragEnd={onLabelDragEnd}
-                />
-                <AmenitiesOverlay
-                  placedAmenities={placedAmenities}
-                  masterAmenities={masterAmenities}
-                  scale={transform.current.scale}
-                  svgRef={svgRef}
-                  onAmenityTransformEnd={handleAmenityTransformEnd}
-                  selectedPlacementIds={selectedPlacementIds}
-                  onSelectionChange={setSelectedPlacementIds}
-                />
-             </svg>
+              ))}
+              <PlotLabelsOverlay
+                documentState={documentState}
+                svgRef={svgRef}
+                scale={transform.current.scale}
+                plots={plots}
+                onLabelDragEnd={onLabelDragEnd}
+              />
+              <AmenitiesOverlay
+                placedAmenities={placedAmenities}
+                masterAmenities={masterAmenities}
+                scale={transform.current.scale}
+                svgRef={svgRef}
+                onAmenityTransformEnd={handleAmenityTransformEnd}
+                selectedPlacementIds={selectedPlacementIds}
+                onSelectionChange={setSelectedPlacementIds}
+              />
+            </svg>
           </div>
-          
+
           {/* ── Partial Delete Overlay ─────────────────────────────────── */}
           {activeTool === 'partial_delete' && (marquee || pdHits.length > 0) && (
             <div className="absolute inset-0 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full pointer-events-none">
@@ -2252,13 +2252,13 @@ export default function CadEditorCanvas({
           {activeTool === 'vector_eraser' && veCursorCoords && (
             <div className="absolute inset-0 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full pointer-events-none">
               <svg viewBox={documentState.viewBox} style={{ pointerEvents: 'none' }}>
-                <circle 
-                  cx={veCursorCoords.x} 
-                  cy={veCursorCoords.y} 
-                  r={eraserSize || 1} 
+                <circle
+                  cx={veCursorCoords.x}
+                  cy={veCursorCoords.y}
+                  r={eraserSize || 1}
                   fill="none"
-                  stroke={veDragging ? "#ef4444" : "#ffffff"} 
-                  strokeWidth="1.5" 
+                  stroke={veDragging ? "#ef4444" : "#ffffff"}
+                  strokeWidth="1.5"
                   vectorEffect="non-scaling-stroke"
                 />
               </svg>
@@ -2268,108 +2268,108 @@ export default function CadEditorCanvas({
           {((drawStart && currentDrawCoords) || (drawPoints.length > 0 && currentDrawCoords) || selectedShapeIds.length > 0) && (
             <div className="absolute inset-0 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full"
               style={{ pointerEvents: activeTool === 'paint_bucket' ? 'none' : undefined }}>
-               <svg viewBox={documentState.viewBox} style={{ pointerEvents: activeTool === 'paint_bucket' ? 'none' : 'auto' }}
-                 onPointerDown={(e) => {
-                   // If the click landed on the overlay SVG background (not a handle), deselect
-                   if (e.target.tagName.toLowerCase() === 'svg' && selectedShapeIds.length > 0 && activeTool === 'pointer') {
-                     setSelectedShapeIds([]);
-                   }
-                 }}
-               >
-                 {activeTool === 'draw_line' && drawStart && currentDrawCoords && (
-                   <line 
-                     x1={drawStart.x} y1={drawStart.y} 
-                     x2={currentDrawCoords.x} y2={currentDrawCoords.y} 
-                     stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke" 
-                   />
-                 )}
-                 {activeTool === 'draw_arrow' && drawStart && currentDrawCoords && (
-                   <path 
-                     d={calculateArrowPath(drawStart, currentDrawCoords, strokeWidth)}
-                     fill="none" stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round"
-                   />
-                 )}
-                 {activeTool === 'draw_circle' && drawStart && currentDrawCoords && (
-                   <circle 
-                     cx={drawStart.x} cy={drawStart.y} 
-                     r={Math.sqrt(Math.pow(currentDrawCoords.x - drawStart.x, 2) + Math.pow(currentDrawCoords.y - drawStart.y, 2))}
-                     stroke="#a5b4fc" strokeWidth={strokeWidth} fill="none" strokeDasharray="4" vectorEffect="non-scaling-stroke" 
-                   />
-                 )}
-                 {activeTool === 'draw_curve' && drawStart && currentDrawCoords && drawStep === 1 && (
-                   <line 
-                     x1={drawStart.x} y1={drawStart.y} 
-                     x2={currentDrawCoords.x} y2={currentDrawCoords.y} 
-                     stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke" 
-                   />
-                 )}
-                 {activeTool === 'draw_curve' && drawStart && drawEnd && currentDrawCoords && drawStep === 2 && (
-                   <path 
-                     d={`M ${drawStart.x} ${drawStart.y} Q ${((drawStart.x + drawEnd.x)/2) + (currentDrawCoords.x - drawEnd.x)} ${((drawStart.y + drawEnd.y)/2) + (currentDrawCoords.y - drawEnd.y)} ${drawEnd.x} ${drawEnd.y}`}
-                     fill="none" stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke" 
-                   />
-                 )}
+              <svg viewBox={documentState.viewBox} style={{ pointerEvents: activeTool === 'paint_bucket' ? 'none' : 'auto' }}
+                onPointerDown={(e) => {
+                  // If the click landed on the overlay SVG background (not a handle), deselect
+                  if (e.target.tagName.toLowerCase() === 'svg' && selectedShapeIds.length > 0 && activeTool === 'pointer') {
+                    setSelectedShapeIds([]);
+                  }
+                }}
+              >
+                {activeTool === 'draw_line' && drawStart && currentDrawCoords && (
+                  <line
+                    x1={drawStart.x} y1={drawStart.y}
+                    x2={currentDrawCoords.x} y2={currentDrawCoords.y}
+                    stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                {activeTool === 'draw_arrow' && drawStart && currentDrawCoords && (
+                  <path
+                    d={calculateArrowPath(drawStart, currentDrawCoords, strokeWidth)}
+                    fill="none" stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round"
+                  />
+                )}
+                {activeTool === 'draw_circle' && drawStart && currentDrawCoords && (
+                  <circle
+                    cx={drawStart.x} cy={drawStart.y}
+                    r={Math.sqrt(Math.pow(currentDrawCoords.x - drawStart.x, 2) + Math.pow(currentDrawCoords.y - drawStart.y, 2))}
+                    stroke="#a5b4fc" strokeWidth={strokeWidth} fill="none" strokeDasharray="4" vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                {activeTool === 'draw_curve' && drawStart && currentDrawCoords && drawStep === 1 && (
+                  <line
+                    x1={drawStart.x} y1={drawStart.y}
+                    x2={currentDrawCoords.x} y2={currentDrawCoords.y}
+                    stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                {activeTool === 'draw_curve' && drawStart && drawEnd && currentDrawCoords && drawStep === 2 && (
+                  <path
+                    d={`M ${drawStart.x} ${drawStart.y} Q ${((drawStart.x + drawEnd.x) / 2) + (currentDrawCoords.x - drawEnd.x)} ${((drawStart.y + drawEnd.y) / 2) + (currentDrawCoords.y - drawEnd.y)} ${drawEnd.x} ${drawEnd.y}`}
+                    fill="none" stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke"
+                  />
+                )}
 
-                 {activeTool === 'draw_polygon' && drawPoints.length > 0 && currentDrawCoords && (
-                   <polyline 
-                     points={drawPoints.map(p => `${p.x},${p.y}`).join(' ') + ` ${currentDrawCoords.x},${currentDrawCoords.y}`}
-                     fill="none" stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke" 
-                   />
-                 )}
-                 
-                 {selectedShapeIds.length === 1 && (
-                   <TransformControls 
-                     shape={findShapeDeep(documentState.shapes, selectedShapeIds[0])}
-                     shapeId={selectedShapeIds[0]}
-                     svgRef={svgRef}
-                     scale={transform.current.scale}
-                     onTransformCommit={(newTransformStr, newAttributes) => {
-                       const updatedShapes = documentState.shapes.map(s => {
-                         if (s.id === selectedShapeIds[0]) {
-                           return { ...s, rawTransform: newTransformStr, attributes: newAttributes ? { ...s.attributes, ...newAttributes } : s.attributes };
-                         }
-                         return s;
-                       });
-                       setDocumentState(prev => ({ ...prev, shapes: updatedShapes }));
-                       if (onSvgModified) {
-                         notifySvgModified(serializeStateToSvgString(updatedShapes, documentState.viewBox));
-                       }
-                     }}
-                   />
-                 )}
-                 {selectedShapeIds.length > 1 && (
-                   <MultiSelectOverlay
-                     selectedShapeIds={selectedShapeIds}
-                     documentState={documentState}
-                     svgRef={svgRef}
-                     scale={transform.current.scale}
-                   />
-                 )}
-                </svg>
-              </div>
+                {activeTool === 'draw_polygon' && drawPoints.length > 0 && currentDrawCoords && (
+                  <polyline
+                    points={drawPoints.map(p => `${p.x},${p.y}`).join(' ') + ` ${currentDrawCoords.x},${currentDrawCoords.y}`}
+                    fill="none" stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke"
+                  />
+                )}
+
+                {selectedShapeIds.length === 1 && (
+                  <TransformControls
+                    shape={findShapeDeep(documentState.shapes, selectedShapeIds[0])}
+                    shapeId={selectedShapeIds[0]}
+                    svgRef={svgRef}
+                    scale={transform.current.scale}
+                    onTransformCommit={(newTransformStr, newAttributes) => {
+                      const updatedShapes = documentState.shapes.map(s => {
+                        if (s.id === selectedShapeIds[0]) {
+                          return { ...s, rawTransform: newTransformStr, attributes: newAttributes ? { ...s.attributes, ...newAttributes } : s.attributes };
+                        }
+                        return s;
+                      });
+                      setDocumentState(prev => ({ ...prev, shapes: updatedShapes }));
+                      if (onSvgModified) {
+                        notifySvgModified(serializeStateToSvgString(updatedShapes, documentState.viewBox));
+                      }
+                    }}
+                  />
+                )}
+                {selectedShapeIds.length > 1 && (
+                  <MultiSelectOverlay
+                    selectedShapeIds={selectedShapeIds}
+                    documentState={documentState}
+                    svgRef={svgRef}
+                    scale={transform.current.scale}
+                  />
+                )}
+              </svg>
+            </div>
           )}
         </div>
-        
+
         {/* Floating Text Input */}
         {textInput && (
-           <input
-             type="text"
-             autoFocus
-             value={textInput.value}
-             onChange={(e) => setTextInput({ ...textInput, value: e.target.value })}
-             onBlur={() => commitText(textInput)}
-             onKeyDown={(e) => {
-               if (e.key === 'Enter') commitText(textInput);
-               if (e.key === 'Escape') setTextInput(null);
-             }}
-             className="fixed bg-transparent border border-indigo-500 rounded px-1 outline-none text-white shadow-lg"
-             style={{
-               left: textInput.screenX,
-               top: textInput.screenY,
-               fontSize: `${Math.max(12, strokeWidth * (transform.current?.scale || 1))}px`
-             }}
-             placeholder="Type text..."
-           />
+          <input
+            type="text"
+            autoFocus
+            value={textInput.value}
+            onChange={(e) => setTextInput({ ...textInput, value: e.target.value })}
+            onBlur={() => commitText(textInput)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitText(textInput);
+              if (e.key === 'Escape') setTextInput(null);
+            }}
+            className="fixed bg-transparent border border-indigo-500 rounded px-1 outline-none text-white shadow-lg"
+            style={{
+              left: textInput.screenX,
+              top: textInput.screenY,
+              fontSize: `${Math.max(12, strokeWidth * (transform.current?.scale || 1))}px`
+            }}
+            placeholder="Type text..."
+          />
         )}
       </div>
     </>

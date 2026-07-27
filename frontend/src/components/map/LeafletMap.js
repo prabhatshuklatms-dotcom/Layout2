@@ -26,12 +26,7 @@ import 'leaflet/dist/leaflet.css';
 import { BASE_URL } from '@/lib/api';
 import LayoutTransformNode from './LayoutTransformNode';
 
-export const BOUNDARY_DRAW_MODE = {
-  POINTER: 'POINTER',
-  POLYGON: 'POLYGON',
-  RECTANGLE: 'RECTANGLE',
-  EDIT: 'EDIT',
-};
+import { BOUNDARY_DRAW_MODE } from './constants';
 
 const LeafletMap = forwardRef(function LeafletMap(
   {
@@ -228,7 +223,7 @@ const LeafletMap = forwardRef(function LeafletMap(
     if (drawMode !== BOUNDARY_DRAW_MODE.EDIT || !activeBoundaryId) return;
 
     const boundary = boundaries.find((b) => b.id === activeBoundaryId);
-    if (!boundary) return;
+    if (!boundary || !boundary.visible) return;
 
     const geo = boundary.geometry?.geometry ?? boundary.geometry;
     if (!geo?.coordinates?.[0]) return;
@@ -520,88 +515,6 @@ const LeafletMap = forwardRef(function LeafletMap(
   }
 
   // ── Render Layouts ──────────────────────────────────────────────────────────
-  const layoutLayers = useRef({});
-  useEffect(() => {
-    const map = mapRef.current;
-    const Lf = L.current;
-    if (!map || !Lf || !layouts) return;
-
-    let changed = false;
-    const newTargets = { ...portalTargets };
-
-    const currentIds = layouts.map(l => l.id);
-    for (const id in layoutLayers.current) {
-      if (!currentIds.includes(parseInt(id))) {
-        try { map.removeLayer(layoutLayers.current[id].marker); } catch {}
-        delete layoutLayers.current[id];
-        delete newTargets[id];
-        changed = true;
-      }
-    }
-
-    layouts.forEach(layout => {
-      if (!layout.mapLatitude || !layout.mapLongitude) {
-        if (layoutLayers.current[layout.id]) {
-          try { map.removeLayer(layoutLayers.current[layout.id].marker); } catch {}
-          delete layoutLayers.current[layout.id];
-          delete newTargets[layout.id];
-          changed = true;
-        }
-        return;
-      }
-
-      if (layoutLayers.current[layout.id]) {
-        const { marker } = layoutLayers.current[layout.id];
-        const draft = draftTransforms[layout.id];
-        const lat = draft?.mapLatitude ?? layout.mapLatitude;
-        const lng = draft?.mapLongitude ?? layout.mapLongitude;
-        marker.setLatLng([lat, lng]);
-      } else {
-        const htmlStr = `<div id="cad-portal-${layout.id}" style="position:relative; width:0; height:0;"></div>`;
-        const icon = Lf.divIcon({
-          className: 'cad-layout-marker',
-          html: htmlStr,
-          iconSize: [0, 0],
-          iconAnchor: [0, 0]
-        });
-
-        const marker = Lf.marker([layout.mapLatitude, layout.mapLongitude], {
-          draggable: true,
-          icon: icon
-        }).addTo(map);
-
-        marker.on('dragstart', () => {
-          setSelectedLayoutId(layout.id);
-        });
-        
-        marker.on('dragend', (e) => {
-          const latlng = e.target.getLatLng();
-          setDraftTransforms(prev => ({
-            ...prev,
-            [layout.id]: {
-              ...(prev[layout.id] || {}),
-              mapLatitude: latlng.lat,
-              mapLongitude: latlng.lng,
-              _dirty: true
-            }
-          }));
-        });
-        
-        layoutLayers.current[layout.id] = { marker };
-        
-        const el = marker.getElement()?.querySelector(`#cad-portal-${layout.id}`);
-        if (el) {
-          layoutLayers.current[layout.id].portalDiv = el;
-          newTargets[layout.id] = el;
-          changed = true;
-        }
-      }
-    });
-
-    if (changed) {
-      setPortalTargets(newTargets);
-    }
-  }, [layouts, leafletLoaded, draftTransforms]);
 
 
 
@@ -716,52 +629,38 @@ const LeafletMap = forwardRef(function LeafletMap(
         </div>
       )}
 
-      {/* React Portals for Layouts */}
-      {Object.keys(portalTargets).map(id => {
-        const layout = layouts?.find(l => l.id === parseInt(id));
-        if (!layout) return null;
-        const target = portalTargets[id];
-        const draft = draftTransforms[id] || {};
+      {/* Direct Render of LayoutTransformNode as a Leaflet Layer */}
+      {leafletLoaded && mapRef.current && layouts?.map(layout => {
+        if (!layout.mapLatitude || !layout.mapLongitude) return null;
         
+        const draft = draftTransforms[layout.id] || {};
         const activeLayout = {
            ...layout,
            mapScale: draft.mapScale ?? layout.mapScale ?? 1,
-           mapRotation: draft.mapRotation ?? layout.mapRotation ?? 0
+           mapRotation: draft.mapRotation ?? layout.mapRotation ?? 0,
+           mapLatitude: draft.mapLatitude ?? layout.mapLatitude,
+           mapLongitude: draft.mapLongitude ?? layout.mapLongitude
         };
 
-        return createPortal(
+        return (
           <LayoutTransformNode
+            key={layout.id}
             layout={activeLayout}
             map={mapRef.current}
             isSelected={selectedLayoutId === layout.id}
             onSelect={() => setSelectedLayoutId(layout.id)}
-            zoomScale={Math.pow(2, currentZoom - baseZoom)}
             onTransformChange={(newDraft) => {
-              if (mapRef.current) mapRef.current.dragging.disable();
-              if (layoutLayers.current[layout.id]?.marker) {
-                layoutLayers.current[layout.id].marker.dragging.disable();
-              }
-
               setDraftTransforms(prev => ({
                 ...prev,
                 [layout.id]: {
                   ...(prev[layout.id] || {}),
-                  mapScale: newDraft.scaleX,
-                  mapRotation: newDraft.rotation,
-                  mapLatitude: newDraft.mapLatitude,
-                  mapLongitude: newDraft.mapLongitude,
+                  ...newDraft,
                   _dirty: true
                 }
               }));
             }}
-            onTransformEnd={(finalState) => {
-              if (mapRef.current) mapRef.current.dragging.enable();
-              if (layoutLayers.current[layout.id]?.marker) {
-                layoutLayers.current[layout.id].marker.dragging.enable();
-              }
-            }}
-          />,
-          target
+            onTransformEnd={() => {}}
+          />
         );
       })}
     </div>

@@ -4,13 +4,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { MapPin, ArrowLeft, Save, Trash2, Undo, Redo, Maximize, MousePointer2, Hexagon, Loader2, Edit2 } from 'lucide-react';
+import { MapPin, ArrowLeft, Save, Trash2, Undo, Redo, Maximize, MousePointer2, Hexagon, Loader2, Edit2, Layers, Eye, EyeOff } from 'lucide-react';
 import area from '@turf/area';
 import { polygon as turfPolygon } from '@turf/helpers';
 import { getProjectBoundaries, createProjectBoundary, updateProjectBoundary, deleteProjectBoundary, getCadConversions, updateCadConversion } from '@/lib/api';
 
 const LeafletMap = dynamic(() => import('@/components/map/LeafletMap'), { ssr: false });
-import { BOUNDARY_DRAW_MODE } from '@/components/map/LeafletMap';
+import { BOUNDARY_DRAW_MODE } from '@/components/map/constants';
 
 export default function ProjectBoundaryWorkspace({ projectId }) {
   const router = useRouter();
@@ -18,6 +18,8 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
   const [saving, setSaving] = useState(false);
   const [boundary, setBoundary] = useState(null); // the single boundary object
   const [drawMode, setDrawMode] = useState(BOUNDARY_DRAW_MODE.POINTER);
+  const [mapType, setMapType] = useState('hybrid');
+  const [boundaryVisible, setBoundaryVisible] = useState(true);
   
   // History for Undo/Redo
   const [history, setHistory] = useState([]);
@@ -27,12 +29,18 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
 
   const pushHistory = useCallback((geoJson) => {
     setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1);
+      // Use the functional state of setHistoryIndex inside the history update
+      // by keeping them perfectly in sync without reading the state from closure.
+      let currentIndex;
+      setHistoryIndex(prevIdx => {
+        currentIndex = prevIdx;
+        return prevIdx + 1;
+      });
+      const newHistory = prev.slice(0, currentIndex + 1);
       newHistory.push(geoJson);
       return newHistory;
     });
-    setHistoryIndex(prev => prev + 1);
-  }, [historyIndex]);
+  }, []);
 
 
   const [layouts, setLayouts] = useState([]);
@@ -240,7 +248,7 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
     id: boundary.id || 999, // dummy ID if unsaved
     name: boundary.name || 'Boundary',
     color: '#10b981',
-    visible: true,
+    visible: boundaryVisible,
     geometry: boundary.geoJson
   }] : [];
 
@@ -266,6 +274,14 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
         </div>
 
         <div className="flex items-center gap-2 bg-zinc-900 rounded-md p-1 border border-zinc-800">
+          <button 
+            className={`p-2 rounded ${!boundaryVisible ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
+            onClick={() => setBoundaryVisible(!boundaryVisible)}
+            title={boundaryVisible ? "Hide Boundary" : "Show Boundary"}
+          >
+            {boundaryVisible ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
+          <div className="w-px h-4 bg-zinc-700 mx-1" />
           <button 
             className={`p-2 rounded ${drawMode === BOUNDARY_DRAW_MODE.POINTER ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
             onClick={() => setDrawMode(BOUNDARY_DRAW_MODE.POINTER)}
@@ -382,10 +398,32 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
 
         {/* Map Container */}
         <div className="flex-1 relative z-0 bg-[#0a0a0a]">
+          {/* Map Layer Controls */}
+          <div className="absolute top-4 right-4 z-[1000]">
+            <div className="bg-zinc-900/90 backdrop-blur-md border border-zinc-700 rounded-lg shadow-2xl p-2 flex items-center gap-1">
+              <Layers size={16} className="text-zinc-500 ml-2 mr-1" />
+              <div className="flex bg-zinc-950 rounded-md overflow-hidden p-1 gap-1">
+                {['satellite', 'hybrid', 'street'].map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setMapType(type)}
+                    className={`text-xs font-medium px-3 py-1.5 rounded transition-colors capitalize ${
+                      mapType === type 
+                        ? 'bg-zinc-800 text-white' 
+                        : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {!loading ? (
             <LeafletMap
               ref={mapRef}
-              mapType="hybrid"
+              mapType={mapType}
               drawMode={drawMode}
               drawingBoundary={drawMode === BOUNDARY_DRAW_MODE.POLYGON || drawMode === BOUNDARY_DRAW_MODE.EDIT}
               boundaries={mapBoundaries}
