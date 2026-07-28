@@ -115,8 +115,11 @@ export class CadConversionController {
     if (!conversion.svgFilePath || !fs.existsSync(conversion.svgFilePath)) {
       throw new BadRequestException('SVG file not available');
     }
+    // Run migration pass so the editor always receives a plot-detected SVG,
+    // even for legacy conversions that pre-date the Plot Detection Engine.
+    const svgContent = await this.cadConversionService.getEditorSvg(+id);
     res.setHeader('Content-Type', 'image/svg+xml');
-    res.sendFile(path.resolve(conversion.svgFilePath));
+    res.send(svgContent);
   }
 
   @Put(':id/svg')

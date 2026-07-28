@@ -11,24 +11,26 @@ const ZOOM_LEVELS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 8, 16, 32, 64];
 // ─── Paint Bucket helpers (pure, no React deps) ───────────────────────────────
 
 /**
- * Return true if a DOM element is a closed SVG shape.
- * Handles path (Z/z), polygon, rect, circle, ellipse, closed polyline.
- * Rejects open paths, open polylines, lines, and text.
+ * Return true if a DOM element represents a closed SVG plot region.
+ *
+ * The Plot Detection Engine stamps data-closed="true" on every normalized
+ * closed region before the SVG reaches the editor, so this check is a simple
+ * attribute read — no geometry inference, no heuristics, no special cases.
+ *
+ * The fallback to structural checks (path Z, polygon, rect, circle, ellipse)
+ * is kept solely as a safety net for in-session shapes drawn by the user with
+ * the draw tools, which don't go through the detection pipeline.
  */
 function pbIsClosed(el) {
+  // Primary: trust the Plot Detection Engine stamp
+  if (el.getAttribute('data-closed') === 'true') return true;
+
+  // Fallback for user-drawn shapes created within this editor session
   const tag = el.tagName?.toLowerCase();
   if (['rect', 'circle', 'ellipse', 'polygon'].includes(tag)) return true;
   if (tag === 'path') {
     const d = (el.getAttribute('d') || '').trimEnd();
     return /[Zz]\s*$/.test(d);
-  }
-  if (tag === 'polyline') {
-    const pts = (el.getAttribute('points') || '').trim().split(/[\s,]+/).filter(Boolean);
-    if (pts.length >= 4) {
-      const [x1, y1] = [parseFloat(pts[0]), parseFloat(pts[1])];
-      const [x2, y2] = [parseFloat(pts[pts.length - 2]), parseFloat(pts[pts.length - 1])];
-      return Math.abs(x1 - x2) < 1e-4 && Math.abs(y1 - y2) < 1e-4;
-    }
   }
   return false;
 }
@@ -162,26 +164,26 @@ function cadHitTestRegion(svgEl, clientX, clientY) {
   for (const tag of VALID_TAGS) {
     svgEl.querySelectorAll(tag).forEach(el => {
       // Ignore overlays, labels, hatches, and background CAD geometry
-      if (el.getAttribute('data-cad-type') === 'hatch' || el.getAttribute('data-cad-type') === 'background' || el.closest('.cad-overlay') || el.style.pointerEvents === 'none' || el.getAttribute('pointer-events') === 'none') {
-        return;
-      }
+      if (
+        el.getAttribute('data-cad-type') === 'hatch' ||
+        el.getAttribute('data-cad-type') === 'background' ||
+        el.closest('.cad-overlay') ||
+        el.style.pointerEvents === 'none' ||
+        el.getAttribute('pointer-events') === 'none'
+      ) return;
 
       try {
         let isHit = false;
 
-        // Strategy 1: Use native isPointInFill if available (fastest, but coordinate system can be tricky)
-        // Some browsers want client coords, some want user coords. We'll pass the DOMPoint as client coords.
+        // Strategy 1: native isPointInFill (fastest)
         if (el.isPointInFill && typeof DOMPoint !== 'undefined') {
           const pt = new DOMPoint(clientX, clientY);
           if (el.isPointInFill(pt)) isHit = true;
-          if (!isHit && el.isPointInStroke) {
-            if (el.isPointInStroke(pt)) isHit = true;
-          }
+          if (!isHit && el.isPointInStroke && el.isPointInStroke(pt)) isHit = true;
         }
 
-        // Strategy 2: If isPointInFill failed or is false, try our robust local-space raycasting
-        // This flawlessly handles nested `<g>` transforms because getPointAtLength and getScreenCTM 
-        // are strictly in the element's local space.
+        // Strategy 2: ray-casting in element-local space.
+        // Only attempted for elements flagged as closed — no geometry guessing.
         if (!isHit && pbIsClosed(el)) {
           const sctm = el.getScreenCTM();
           if (sctm) {
@@ -195,7 +197,7 @@ function cadHitTestRegion(svgEl, clientX, clientY) {
           }
         }
 
-        // Strategy 3: Bounding box hit testing for hollow shapes or newly added tags (line, text, use)
+        // Strategy 3: fallback bounding box hit testing for newly added tags (text, use)
         if (!isHit) {
           const fill = el.getAttribute('fill');
           const tagLower = el.tagName.toLowerCase();
@@ -235,7 +237,6 @@ function cadHitTestRegion(svgEl, clientX, clientY) {
             const rect = el.getBoundingClientRect();
             area = rect.width * rect.height;
           }
-
           candidates.push({ element: el, area });
         }
       } catch (err) { }
@@ -249,13 +250,10 @@ function cadHitTestRegion(svgEl, clientX, clientY) {
   candidates.sort((a, b) => a.area - b.area);
 
   const best = candidates[0].element;
-
-  // Debug Log
-  console.log('[HitTest] Selected Region:', best.tagName, best.id || '(no id)');
-  console.log('[HitTest] Selection Reason: Smallest containing valid region. Area:', candidates[0].area.toFixed(2));
+  console.log('[HitTest] Selected Region:', best.tagName, best.id || '(no id)', '| data-closed:', best.getAttribute('data-closed'));
   if (best.getScreenCTM) {
     const t = best.getScreenCTM();
-    console.log(`[HitTest] Transform Matrix: [a: ${t.a.toFixed(2)}, b: ${t.b.toFixed(2)}, c: ${t.c.toFixed(2)}, d: ${t.d.toFixed(2)}, e: ${t.e.toFixed(2)}, f: ${t.f.toFixed(2)}]`);
+    console.log(`[HitTest] Transform Matrix: [a:${t.a.toFixed(2)} b:${t.b.toFixed(2)} c:${t.c.toFixed(2)} d:${t.d.toFixed(2)} e:${t.e.toFixed(2)} f:${t.f.toFixed(2)}]`);
   }
 
   return { element: best, area: candidates[0].area, allCandidates: candidates };
@@ -289,6 +287,23 @@ function paintBucketFindRegion(svgEl, clientX, clientY) {
 
   console.log('[PaintBucket:findRegion] SVG-space click:', svgPt.x.toFixed(2), svgPt.y.toFixed(2));
 
+  // Query only elements stamped by the Plot Detection Engine.
+  // Every closed plot is a normalized <path data-closed="true">, so this is
+  // a direct attribute lookup — no geometry inference needed here.
+  const closedEls = Array.from(svgEl.querySelectorAll('[data-closed="true"]'));
+
+  // Fallback: also include user-drawn shapes (rect, circle, ellipse, polygon,
+  // closed path) that were added in the current session and are not yet stamped.
+  const FALLBACK_TAGS = ['path', 'polygon', 'rect', 'circle', 'ellipse'];
+  for (const tag of FALLBACK_TAGS) {
+    svgEl.querySelectorAll(tag).forEach(el => {
+      if (el.getAttribute('data-closed') === 'true') return; // already covered
+      if (el.getAttribute('data-cad-type') === 'hatch') return;
+      if (!pbIsClosed(el)) return;
+      closedEls.push(el);
+    });
+  }
+
   const CLOSED_TAGS = ['path', 'polygon', 'polyline', 'rect', 'circle', 'ellipse'];
 
   // Count total for diagnostics
@@ -296,55 +311,41 @@ function paintBucketFindRegion(svgEl, clientX, clientY) {
   for (const t of CLOSED_TAGS) totalInDoc += svgEl.querySelectorAll(t).length;
   console.log('[PaintBucket:findRegion] svgEl children:', svgEl.childElementCount,
     '| total queried elements:', totalInDoc,
+    '| data-closed elements:', closedEls.length,
     '| viewBox attr:', svgEl.getAttribute('viewBox'));
 
-  let totalClosed = 0;
+  let totalClosed = closedEls.length;
   const containing = [];
 
-  for (const tag of CLOSED_TAGS) {
-    svgEl.querySelectorAll(tag).forEach(el => {
-      if (el.getAttribute('data-cad-type') === 'hatch') return;
-      if (!pbIsClosed(el)) return;
-      totalClosed++;
+  for (const el of closedEls) {
+    try {
+      // Sample boundary in SVG user space using getPointAtLength.
+      // These points are already in SVG user space — no further transform needed.
+      const pts = pbSamplePoints(el);
+      if (!pts || pts.length < 3) continue;
 
-      try {
-        // Sample boundary in SVG user space using getPointAtLength.
-        // These points are already in SVG user space — no further transform needed.
-        const pts = pbSamplePoints(el);
-        if (!pts || pts.length < 3) return;
-
-        // Quick bounding-box pre-filter (fast rejection)
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const p of pts) {
-          if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-          if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-        }
-        if (svgPt.x < minX || svgPt.x > maxX || svgPt.y < minY || svgPt.y > maxY) return;
-
-        // Ray-casting point-in-polygon
-        if (!pbPointInPoly(svgPt.x, svgPt.y, pts)) return;
-
-        const bb = el.getBBox();
-        const area = pbComputeArea(el);
-
-        // Verbose diagnostic for first 5 closed shapes
-        if (totalClosed <= 5) {
-          console.log(
-            `[PaintBucket:findRegion] #${totalClosed} id=${el.id || '?'} tag=${el.tagName}` +
-            ` | bbox: ${bb.x.toFixed(1)},${bb.y.toFixed(1)} ${bb.width.toFixed(1)}x${bb.height.toFixed(1)}` +
-            ` | area=${area.toFixed(2)} | CONTAINS CLICK`
-          );
-        }
-
-        containing.push({
-          element: el,
-          area,
-          bbox: { x: bb.x, y: bb.y, w: bb.width, h: bb.height },
-        });
-      } catch (err) {
-        console.warn('[PaintBucket:findRegion] element error:', el.id, err.message);
+      // Quick bounding-box pre-filter (fast rejection)
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const p of pts) {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
       }
-    });
+      if (svgPt.x < minX || svgPt.x > maxX || svgPt.y < minY || svgPt.y > maxY) continue;
+
+      // Ray-casting point-in-polygon
+      if (!pbPointInPoly(svgPt.x, svgPt.y, pts)) continue;
+
+      const bb = el.getBBox();
+      const area = pbComputeArea(el);
+
+      containing.push({
+        element: el,
+        area,
+        bbox: { x: bb.x, y: bb.y, w: bb.width, h: bb.height },
+      });
+    } catch (err) {
+      console.warn('[PaintBucket:findRegion] element error:', el.id, err.message);
+    }
   }
 
   if (!containing.length) return null;
@@ -1499,6 +1500,7 @@ export default function CadEditorCanvas({
       }
       el = el.parentElement;
     }
+    
     // Second pass: accept a <g> if that's all we have
     el = targetEl;
     while (el && el.tagName?.toLowerCase() !== 'svg') {
@@ -1523,24 +1525,23 @@ export default function CadEditorCanvas({
     });
   };
 
+  const handleShapePointerDown = (e, shapeId) => {
+    if (activeTool === 'eraser' && e.button === 0) {
+      e.stopPropagation(); // Stop event from bubbling to parent groups or SVG background
+      const newShapes = deleteShapeDeep(documentState.shapes, shapeId);
+      setDocumentState(prev => ({ ...prev, shapes: newShapes }));
+      notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
+      console.log(`[ERASER] Deleted shape ${shapeId} via React event`);
+    }
+  };
+
   const handleSvgPointerDown = (e) => {
     const target = e.target;
     if (!target || !target.tagName) return;
     const tag = target.tagName.toLowerCase();
     const isShape = ['path', 'line', 'circle', 'ellipse', 'rect', 'polygon', 'polyline', 'text', 'tspan', 'use', 'g'].includes(tag);
 
-    if (activeTool === 'eraser') {
-      if (tag !== 'svg' && tag !== 'div') {
-        const shapeId = resolveShapeId(target);
-        if (shapeId) {
-          const newShapes = deleteShapeDeep(documentState.shapes, shapeId);
-          setDocumentState({ ...documentState, shapes: newShapes });
-          notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
-          e.stopPropagation();
-        }
-      }
-
-    } else if (activeTool === 'paint_bucket' && e.button === 0) {
+    if (activeTool === 'paint_bucket' && e.button === 0) {
       // ── Paint Bucket ────────────────────────────────────────────────────
       const svgEl = svgRef.current?.querySelector('svg');
       if (!svgEl) { e.stopPropagation(); return; }
@@ -1623,9 +1624,12 @@ export default function CadEditorCanvas({
         ' transform =', geometry.transform || '(none)');
 
       // ── Replace or create hatch ─────────────────────────────────────────
-      // Use the boundary element's ID for reliable duplicate detection
-      // (works for all element types — path, rect, circle, ellipse, polygon)
-      const boundaryRef = boundaryEl.id || '';
+      // Use the boundary element's ID for reliable duplicate detection.
+      // After the Plot Detection Engine runs, every closed plot has a stable
+      // id ("cad-plot-<N>"), so this is simply boundaryEl.id in the normal case.
+      // resolveShapeId is a fallback for user-drawn shapes that went through
+      // parseSvgStringToState and have a documentState-tracked id instead.
+      const boundaryRef = boundaryEl.id || resolveShapeId(boundaryEl) || '';
       const existingIdx = boundaryRef
         ? documentState.shapes.findIndex(
           s => s.attributes?.['data-cad-type'] === 'hatch' &&
@@ -1681,7 +1685,11 @@ export default function CadEditorCanvas({
           const hit = cadHitTestRegion(svgEl, e.clientX, e.clientY);
           if (hit) {
             const boundaryEl = hit.element;
-            shapeId = boundaryEl.id;
+            // Prefer the DOM element's own id (set when the SVG has been round-tripped
+            // through the editor). Fall back to resolveShapeId which walks up the tree
+            // and matches against documentState — this handles freshly-converted SVGs
+            // whose path elements carry no id attribute yet.
+            shapeId = boundaryEl.id || resolveShapeId(boundaryEl);
 
             const prevStroke = boundaryEl.getAttribute('stroke');
             const prevStrokeWidth = boundaryEl.getAttribute('stroke-width');
@@ -2171,6 +2179,8 @@ export default function CadEditorCanvas({
                 <ShapeRenderer
                   key={`${shape.id}-${index}`}
                   shape={shape}
+                  isSelected={selectedShapeIds.includes(shape.id)}
+                  onPointerDown={handleShapePointerDown}
                   plots={plots}
                   statuses={statuses}
                 />

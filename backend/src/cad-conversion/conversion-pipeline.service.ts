@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CadConversionService } from './cad-conversion.service';
 import { CadConfigService } from './cad-config.service';
+import { PlotDetectionService } from './plot-detection.service';
 import * as fs from 'fs';
 import * as path from 'path';
 // @ts-ignore
@@ -12,7 +13,8 @@ export class ConversionPipelineService {
 
   constructor(
     private readonly cadConversionService: CadConversionService,
-    private readonly cadConfig: CadConfigService
+    private readonly cadConfig: CadConfigService,
+    private readonly plotDetection: PlotDetectionService,
   ) {}
 
   async runPipeline(conversionId: number, filePath: string, originalName: string) {
@@ -90,15 +92,23 @@ export class ConversionPipelineService {
 
       // 4. Generate SVG
       const svgPath = filePath + '.svg';
-      const svgContent = this.generateSvgFromDxf(parsedData);
-      fs.writeFileSync(svgPath, svgContent);
+      const rawSvg = this.generateSvgFromDxf(parsedData);
 
-      // 5. Extract metadata
+      // 5. Run Plot Detection — normalize all closed regions and stamp metadata.
+      //    This must happen before the file is written so the editor always
+      //    receives a fully annotated SVG, with no save/reload cycle required.
+      const detection = this.plotDetection.detect(rawSvg);
+      fs.writeFileSync(svgPath, detection.svg);
+      this.logger.log(
+        `Plot Detection: ${detection.detectedCount} closed plot(s) detected and normalized`
+      );
+
+      // 6. Extract metadata
       const entityCount = parsedData.entities.length;
       const layerCount = parsedData.tables && parsedData.tables.layer && parsedData.tables.layer.layers ? Object.keys(parsedData.tables.layer.layers).length : 0;
       const blockCount = parsedData.blocks ? Object.keys(parsedData.blocks).length : 0;
 
-      // 6. Complete
+      // 7. Complete
       const conversionTime = Date.now() - startTime;
       await this.cadConversionService.update(conversionId, {
         status: 'SUCCESS',
@@ -242,8 +252,11 @@ export class CadSvgRenderer {
     for (const entity of entities) {
       const color = this.getColor(entity);
       const strokeStr = color !== 'currentColor' ? `stroke="${color}"` : '';
-      const bgAttr = `data-cad-type="background"`;
-      const combinedAttrs = strokeStr ? `${bgAttr} ${strokeStr}` : bgAttr;
+      // data-cad-type="background" is intentionally NOT set on geometric entities.
+      // It is only applied to TEXT elements below, where it prevents them from being
+      // selected or erased by the editor tools.
+      const idAttr = `id="cad-entity-${this.convertedCount}"`;
+      const combinedAttrs = strokeStr ? `${strokeStr} ${idAttr}` : idAttr;
 
       try {
         if (entity.type === 'LINE') {
@@ -347,7 +360,7 @@ export class CadSvgRenderer {
             rot = -entity.rotation;
           }
           const fillStr = color !== 'currentColor' ? `fill="${color}"` : 'fill="currentColor"';
-          this.paths.push(`<text x="${x}" y="${y}" font-size="${h}" font-family="sans-serif" transform="rotate(${rot} ${x} ${y})" ${fillStr} stroke="none" alignment-baseline="middle" text-anchor="middle" data-cad-type="background">${text}</text>`);
+          this.paths.push(`<text ${idAttr} x="${x}" y="${y}" font-size="${h}" font-family="sans-serif" transform="rotate(${rot} ${x} ${y})" ${fillStr} stroke="none" alignment-baseline="middle" text-anchor="middle" data-cad-type="background">${text}</text>`);
           this.convertedCount++;
 
         } else if (entity.type === 'INSERT') {
@@ -364,7 +377,7 @@ export class CadSvgRenderer {
           let rot = entity.rotation !== undefined ? -entity.rotation : 0;
           
           const transform = `translate(${x} ${y}) rotate(${rot}) scale(${scaleX} ${scaleY})`;
-          this.paths.push(`<use href="#block_${blockName}" transform="${transform}" />`);
+          this.paths.push(`<use ${idAttr} href="#block_${blockName}" transform="${transform}" />`);
           this.convertedCount++;
 
         } else {

@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlotDetectionService } from './plot-detection.service';
 import * as fs from 'fs';
 import { JSDOM } from 'jsdom';
 
 @Injectable()
 export class CadConversionService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private plotDetection: PlotDetectionService,
+  ) { }
 
   async create(data: any) {
     return this.prisma.cadConversion.create({ data });
@@ -35,6 +39,27 @@ export class CadConversionService {
     return this.prisma.cadConversion.delete({ where: { id } });
   }
 
+  /**
+   * Return the SVG string for the editor, running the Plot Detection migration
+   * pass first if the file was produced before the detection engine existed.
+   * The normalized SVG is written back to disk so subsequent loads are instant.
+   */
+  async getEditorSvg(id: number): Promise<string> {
+    const conversion = await this.prisma.cadConversion.findUnique({ where: { id } });
+    if (!conversion) throw new NotFoundException('Conversion not found');
+    if (!conversion.svgFilePath || !fs.existsSync(conversion.svgFilePath)) {
+      throw new NotFoundException('SVG file not available');
+    }
+
+    let svg = fs.readFileSync(conversion.svgFilePath, 'utf-8');
+    const result = this.plotDetection.detect(svg);
+    if (!result.wasAlreadyNormalized) {
+      svg = result.svg;
+      fs.writeFileSync(conversion.svgFilePath, svg, 'utf-8');
+    }
+    return svg;
+  }
+
   // ── Composite SVG ──────────────────────────────────────────────────────────
   // Builds an SVG that contains the base drawing PLUS all runtime overlays
   // (plot status colors, plot number labels, amenity icons) so the map
@@ -47,7 +72,17 @@ export class CadConversionService {
     }
 
     // 1. Read the base SVG
-    const baseSvg = fs.readFileSync(conversion.svgFilePath, 'utf-8');
+    let baseSvg = fs.readFileSync(conversion.svgFilePath, 'utf-8');
+
+    // 1a. Migration pass — if this is a legacy SVG that was converted before
+    //     the Plot Detection Engine existed, run detection once and overwrite
+    //     the file on disk so future loads are instant.
+    const migrationResult = this.plotDetection.detect(baseSvg);
+    if (!migrationResult.wasAlreadyNormalized) {
+      baseSvg = migrationResult.svg;
+      fs.writeFileSync(conversion.svgFilePath, baseSvg, 'utf-8');
+    }
+
     const dom = new JSDOM(baseSvg, { contentType: 'image/svg+xml' });
     const doc = dom.window.document;
     const svgEl = doc.querySelector('svg');

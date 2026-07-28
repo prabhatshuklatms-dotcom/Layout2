@@ -37,8 +37,8 @@ function domNodeToShape(node) {
     children: []
   };
 
-  // Skip definitions and metadata
-  if (['defs', 'style', 'title', 'desc', 'metadata'].includes(shape.type)) {
+  // Skip definitions and metadata (except defs, which are needed for AutoCAD blocks)
+  if (['style', 'title', 'desc', 'metadata'].includes(shape.type)) {
     return null; 
   }
 

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import CadEditorTopBar from './CadEditorTopBar';
@@ -58,11 +58,13 @@ export default function CadEditorWorkspace({ conversionId, projectId }) {
   };
 
   const saveSvgContent = async (newSvgString) => {
+    console.log('[ERASER Stage 12] saveSvgContent called. SVG length:', newSvgString?.length, '| historyIndex before:', historyIndex);
     const newHistory = history.slice(0, historyIndex + 1);
     newHistory.push(newSvgString);
     setHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
     setSvgContent(newSvgString);
+    console.log('[ERASER Stage 12] setSvgContent called. New history length:', newHistory.length);
   };
 
   const handleUndo = () => {
@@ -248,7 +250,10 @@ export default function CadEditorWorkspace({ conversionId, projectId }) {
       <div className="flex-1 flex overflow-hidden relative">
         <CadEditorToolbar 
           activeTool={activeTool} 
-          onToolChange={setActiveTool} 
+          onToolChange={(tool) => {
+            console.log('[ERASER Stage 1] Toolbar onToolChange called. New tool:', tool);
+            setActiveTool(tool);
+          }} 
         />
 
         <div className="flex-1 relative overflow-hidden bg-[#0a0a0a]">

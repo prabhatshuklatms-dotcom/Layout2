@@ -55,11 +55,11 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
     }
   }
 
-  if (Tag === 'g') {
+  if (Tag === 'g' || Tag === 'defs' || Tag === 'clipPath' || Tag === 'pattern') {
     return (
-      <g id={shape.id} transform={transformStr} {...reactAttrs} onPointerDown={handlePointerDown}>
+      <Tag id={shape.id} transform={transformStr} {...reactAttrs} onPointerDown={handlePointerDown}>
         {children}
-      </g>
+      </Tag>
     );
   }
 

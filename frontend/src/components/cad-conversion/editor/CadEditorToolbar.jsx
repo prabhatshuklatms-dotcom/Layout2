@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { MousePointer2, ZoomIn, Layers, Settings2, Eraser, Scissors, Wand, Minus, Circle, Spline, Hexagon, Type, ArrowRight, PaintBucket } from 'lucide-react';
 
 export default function CadEditorToolbar({ activeTool, onToolChange }) {
@@ -24,7 +24,7 @@ export default function CadEditorToolbar({ activeTool, onToolChange }) {
         {tools.map(tool => (
           <button
             key={tool.id}
-            onClick={() => onToolChange(tool.id)}
+            onClick={() => { console.log('[ERASER Stage 1] Toolbar button clicked. tool.id:', tool.id); onToolChange(tool.id); console.log('[ERASER Stage 1] onToolChange called with:', tool.id); }}
             title={tool.label}
             className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${
               activeTool === tool.id 
