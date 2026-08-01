@@ -33,6 +33,22 @@ export class CadProjectsService {
     });
   }
 
+  async findPublic() {
+    // For now, return all projects, but include conversion and plot counts
+    // In the future, this can be filtered by an 'isActive' flag
+    return this.prisma.cadProject.findMany({
+      include: {
+        _count: {
+          select: { 
+            conversions: true,
+            plots: true 
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
   async findOne(id: number) {
     const project = await this.prisma.cadProject.findUnique({
       where: { id },

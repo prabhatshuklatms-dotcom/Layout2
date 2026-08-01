@@ -9,7 +9,7 @@ const STROKE_SUPPORTED_TYPES = new Set([
 const MIN_STROKE = 0.01;
 const MAX_STROKE = 20;
 
-export default function CadEditorSidebar({ projectId, conversion, coords, activeTool, selectedShapes, fillColor, fillOpacity, eraserSize, plots, statuses, masterAmenities = [], onFillColorChange, onFillOpacityChange, onStrokeWidthChange, onEraserSizeChange, onAssignPlot }) {
+export default function CadEditorSidebar({ projectId, conversion, coords, activeTool, selectedShapes, fillColor, fillOpacity, eraserSize, plots, statuses, masterAmenities = [], onFillColorChange, onFillOpacityChange, onStrokeWidthChange, onEraserSizeChange, onAssignPlot, onCadLineColorChange }) {
   const [localStroke, setLocalStroke] = useState(2);
   const [localEraser, setLocalEraser] = useState(1);
   
@@ -118,6 +118,45 @@ export default function CadEditorSidebar({ projectId, conversion, coords, active
         </div>
       </div>
 
+      {/* ── Appearance ──────────────────────────────────────────────────── */}
+      <div className="p-4 border-b border-zinc-800">
+        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Appearance</h3>
+        <div className="space-y-3">
+          <div>
+            <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">CAD Line Color</div>
+            <div className="flex items-center gap-2">
+              <label className="flex-1 flex justify-center py-1.5 px-3 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 rounded cursor-pointer transition-colors border border-zinc-700">
+                Pick Color
+                <input 
+                  type="color" 
+                  className="sr-only" 
+                  value={conversion?.cadLineColor || '#FFFFFF'}
+                  onChange={(e) => {
+                    if (onCadLineColorChange) {
+                      onCadLineColorChange(e.target.value.toUpperCase());
+                    }
+                  }}
+                />
+              </label>
+              <button
+                onClick={() => {
+                  if (onCadLineColorChange) {
+                    onCadLineColorChange('#FFFFFF');
+                  }
+                }}
+                className="py-1.5 px-3 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded border border-zinc-700 transition-colors"
+                title="Reset to Default"
+              >
+                Reset
+              </button>
+            </div>
+            <div className="text-xs text-zinc-500 font-mono mt-2 truncate text-center">
+              Current: {conversion?.cadLineColor || '#FFFFFF'}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── Properties ──────────────────────────────────────────────────── */}
       <div className="p-4 border-b border-zinc-800">
         <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Properties</h3>
@@ -144,6 +183,87 @@ export default function CadEditorSidebar({ projectId, conversion, coords, active
                   <div className="text-xs text-zinc-500 font-mono mt-1 truncate">ID: {selectedShape.id}</div>
                 )}
               </div>
+              
+              {/* Fill Color */}
+              {selectedShapes.length === 1 && (
+                <div className="mt-4 pt-4 border-t border-zinc-800">
+                  <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-2">Fill Color</h4>
+                  <div className="bg-[#1a1c23] p-3 rounded-lg border border-zinc-800 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-zinc-400">Current Color</span>
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-4 h-4 rounded-sm border border-zinc-700" 
+                          style={{ backgroundColor: selectedShape.attributes?.fill || 'transparent' }}
+                        ></div>
+                        <span className="text-xs font-mono text-zinc-300">
+                          {selectedShape.attributes?.fill || 'none'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="flex-1 text-center py-1.5 px-3 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 rounded cursor-pointer transition-colors border border-zinc-700">
+                          Change Color
+                          <input 
+                            type="color" 
+                            className="sr-only" 
+                            value={selectedShape.attributes?.fill && selectedShape.attributes.fill !== 'none' ? (selectedShape.attributes.fill.startsWith('#') ? selectedShape.attributes.fill : '#ffffff') : '#ffffff'}
+                            onChange={(e) => {
+                              const currentAttrs = selectedShape.attributes || {};
+                              const evt = new CustomEvent('cad-patch-shape', {
+                                detail: {
+                                  id: selectedShape.id,
+                                  patch: { 
+                                    fill: e.target.value,
+                                    'data-cad-custom-fill': 'true',
+                                    'data-original-fill': currentAttrs['data-original-fill'] ?? (currentAttrs.fill !== undefined ? currentAttrs.fill : 'MISSING'),
+                                    'data-original-fill-opacity': currentAttrs['data-original-fill-opacity'] ?? (currentAttrs['fill-opacity'] !== undefined ? currentAttrs['fill-opacity'] : 'MISSING')
+                                  }
+                                }
+                              });
+                              window.dispatchEvent(evt);
+                            }}
+                          />
+                        </label>
+                      </div>
+                      
+                      <button
+                        disabled={selectedShape.attributes?.['data-cad-custom-fill'] !== 'true'}
+                        className={`py-1.5 px-3 text-xs rounded border transition-colors ${
+                          selectedShape.attributes?.['data-cad-custom-fill'] === 'true'
+                            ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20'
+                            : 'bg-zinc-800/50 text-zinc-600 border-zinc-800 cursor-not-allowed'
+                        }`}
+                        onClick={() => {
+                          const attrs = selectedShape.attributes || {};
+                          const originalFill = attrs['data-original-fill'];
+                          const originalFillOpacity = attrs['data-original-fill-opacity'];
+                          
+                          if (originalFill !== undefined) {
+                            const evt = new CustomEvent('cad-patch-shape', {
+                              detail: {
+                                id: selectedShape.id,
+                                patch: {
+                                  fill: originalFill === 'MISSING' ? null : originalFill,
+                                  'fill-opacity': (originalFillOpacity === undefined || originalFillOpacity === 'MISSING') ? null : originalFillOpacity,
+                                  'data-cad-custom-fill': null,
+                                  'data-original-fill': null,
+                                  'data-original-fill-opacity': null
+                                }
+                              }
+                            });
+                            window.dispatchEvent(evt);
+                          }
+                        }}
+                      >
+                        Reset to Default
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {/* Plot Assignment */}
               {selectedShapes.length === 1 && (

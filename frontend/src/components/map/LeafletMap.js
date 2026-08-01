@@ -34,7 +34,7 @@ const LeafletMap = forwardRef(function LeafletMap(
     boundaries, activeBoundaryId, currentColor,
     onDrawComplete, onSelectBoundary, onMoveComplete,
     initialBounds, staticPreview, onLayoutDrop,
-    layouts, onLayoutUpdate
+    layouts, onLayoutUpdate, plots, statuses, showPlotStatus
   },
   ref,
 ) {
@@ -647,6 +647,9 @@ const LeafletMap = forwardRef(function LeafletMap(
             key={layout.id}
             layout={activeLayout}
             map={mapRef.current}
+            plots={plots}
+            statuses={statuses}
+            showPlotStatus={showPlotStatus}
             isSelected={selectedLayoutId === layout.id}
             onSelect={() => setSelectedLayoutId(layout.id)}
             onTransformChange={(newDraft) => {

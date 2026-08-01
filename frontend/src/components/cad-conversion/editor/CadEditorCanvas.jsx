@@ -5,6 +5,7 @@ import { parseSvgStringToState, serializeStateToSvgString } from './SvgDocumentM
 import { findHitsForShape, applyVectorErase, applyPartialDelete, generateHighlightPaths } from './partialDelete';
 import { createAmenityPlacement, updateAmenityPlacement, deleteAmenityPlacement } from '@/lib/api';
 import AmenitiesOverlay from './AmenitiesOverlay';
+import SelectedPlotGeometryOverlay from './SelectedPlotGeometryOverlay';
 
 const ZOOM_LEVELS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 8, 16, 32, 64];
 
@@ -617,203 +618,8 @@ function MultiSelectOverlay({ selectedShapeIds, documentState, svgRef, scale }) 
   );
 }
 
-// ─── Plot Labels Overlay ──────────────────────────────────────────────────────
-function PlotLabelsOverlay({ documentState, svgRef, scale, plots, onLabelDragEnd }) {
-  const [labels, setLabels] = useState([]);
-  const [dragState, setDragState] = useState(null);
+import PlotLabelsOverlay from '../PlotLabelsOverlay';
 
-  useEffect(() => {
-    if (!svgRef.current || !plots || plots.length === 0) {
-      setLabels([]); return;
-    }
-
-    // We need to recursively find shapes with data-plot-id
-    const findPlotShapes = (shapes, result = []) => {
-      for (const s of shapes) {
-        if (s.attributes && s.attributes['data-plot-id']) {
-          result.push({ id: s.id, plotId: s.attributes['data-plot-id'], attributes: s.attributes });
-        }
-        if (s.children && s.children.length > 0) {
-          findPlotShapes(s.children, result);
-        }
-      }
-      return result;
-    };
-
-    const plotShapes = findPlotShapes(documentState.shapes);
-    if (plotShapes.length === 0) {
-      setLabels([]); return;
-    }
-
-    const newLabels = [];
-    for (const { id, plotId, attributes } of plotShapes) {
-      const el = svgRef.current.querySelector(`#${CSS.escape(id)}`);
-      const plot = plots.find(p => p.id === parseInt(plotId));
-      if (el && plot) {
-        try {
-          const c = pbComputeCentroid(el);
-
-          const dx = parseFloat(attributes['data-label-dx'] || 0);
-          const dy = parseFloat(attributes['data-label-dy'] || 0);
-
-          newLabels.push({
-            id,
-            plot,
-            attributes,
-            x: c.x + dx,
-            y: c.y + dy,
-            baseX: c.x,
-            baseY: c.y,
-          });
-        } catch (_) { }
-      }
-    }
-    setLabels(newLabels);
-  }, [documentState.shapes, svgRef, scale, plots]);
-
-  useEffect(() => {
-    if (!dragState) return;
-
-    const handlePointerMove = (e) => {
-      if (!svgRef.current) return;
-      const svgEl = svgRef.current.querySelector('svg');
-      if (!svgEl) return;
-
-      const pt = svgEl.createSVGPoint();
-      pt.x = e.clientX;
-      pt.y = e.clientY;
-      const svgP = pt.matrixTransform(svgEl.getScreenCTM().inverse());
-
-      const currentDx = svgP.x - dragState.startX;
-      const currentDy = svgP.y - dragState.startY;
-
-      setDragState(prev => ({ ...prev, currentDx, currentDy }));
-    };
-
-    const handlePointerUp = () => {
-      if (dragState.currentDx !== 0 || dragState.currentDy !== 0) {
-        onLabelDragEnd(
-          dragState.id,
-          dragState.initialDx + dragState.currentDx,
-          dragState.initialDy + dragState.currentDy
-        );
-      }
-      setDragState(null);
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
-  }, [dragState, svgRef, onLabelDragEnd]);
-
-  if (labels.length === 0) return null;
-
-  const svgEl = svgRef.current?.querySelector('svg');
-  let actualScale = scale;
-  try { actualScale = svgEl?.getScreenCTM()?.a || scale; } catch (_) { }
-
-  return (
-    <g>
-      {labels.map((label) => {
-        const { id, plot, attributes, x, y, baseX, baseY } = label;
-
-        // Active drag overrides
-        let renderX = x;
-        let renderY = y;
-        if (dragState && dragState.id === id) {
-          renderX = baseX + dragState.initialDx + dragState.currentDx;
-          renderY = baseY + dragState.initialDy + dragState.currentDy;
-        }
-
-        const fontSizeAttr = parseFloat(attributes['data-label-fontsize'] || 14);
-        const fontFam = attributes['data-label-fontfamily'] || 'sans-serif';
-        const color = attributes['data-label-color'] || '#ffffff';
-        const showArea = attributes['data-label-show-area'] !== 'false';
-        const showWidth = attributes['data-label-show-width'] !== 'false';
-        const showHeight = attributes['data-label-show-height'] !== 'false';
-        const rotationAttr = parseFloat(attributes['data-label-rotation'] || 0);
-        const alignAttr = attributes['data-label-align'] || 'middle';
-
-        const baseFontSize = fontSizeAttr / actualScale;
-
-        let textX = 0;
-
-        let lines = [];
-        lines.push({ text: plot.plotNumber || '?', size: baseFontSize * 1.5, weight: 'bold', color });
-        if (showArea) {
-          if (plot.areaSqMeter) lines.push({ text: `${plot.areaSqMeter} m²`, size: baseFontSize * 0.9, weight: 'normal', color });
-          if (plot.areaSqYard) lines.push({ text: `${plot.areaSqYard} yd²`, size: baseFontSize * 0.9, weight: 'normal', color });
-        }
-        if (showWidth && plot.width) {
-          lines.push({ text: 'Width', size: baseFontSize * 0.6, weight: 'normal', color, dy: baseFontSize * 0.4 });
-          lines.push({ text: `${plot.width} m`, size: baseFontSize * 0.85, weight: 'bold', color });
-        }
-        if (showHeight && plot.height) {
-          lines.push({ text: 'Height', size: baseFontSize * 0.6, weight: 'normal', color, dy: baseFontSize * 0.4 });
-          lines.push({ text: `${plot.height} m`, size: baseFontSize * 0.85, weight: 'bold', color });
-        }
-
-        let currentY = 0;
-        lines.forEach(l => {
-          if (l.dy) currentY += l.dy;
-          l.y = currentY;
-          currentY += l.size * 1.3;
-        });
-        const totalHeight = currentY;
-        lines.forEach(l => {
-          l.y -= (totalHeight / 2) - (l.size * 0.4); // center vertically
-        });
-
-        return (
-          <g
-            key={`label-${id}`}
-            transform={`translate(${renderX}, ${renderY}) rotate(${rotationAttr})`}
-            className="cursor-move"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              if (!svgRef.current) return;
-              const svgEl = svgRef.current.querySelector('svg');
-              const pt = svgEl.createSVGPoint();
-              pt.x = e.clientX;
-              pt.y = e.clientY;
-              const svgP = pt.matrixTransform(svgEl.getScreenCTM().inverse());
-
-              setDragState({
-                id,
-                startX: svgP.x,
-                startY: svgP.y,
-                initialDx: parseFloat(attributes['data-label-dx'] || 0),
-                initialDy: parseFloat(attributes['data-label-dy'] || 0),
-                currentDx: 0,
-                currentDy: 0
-              });
-            }}
-          >
-            {lines.map((l, i) => (
-              <text
-                key={i}
-                x={textX}
-                textAnchor={alignAttr}
-                fill={l.color}
-                fontSize={l.size}
-                fontWeight={l.weight}
-                fontFamily={fontFam}
-                y={l.y}
-                style={{ pointerEvents: 'none' }}
-              >
-                {l.text}
-              </text>
-            ))}
-          </g>
-        );
-      })}
-    </g>
-  );
-}
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -827,6 +633,7 @@ export default function CadEditorCanvas({
   fillOpacity = 1.0,
   plots,
   statuses,
+  showPlotStatus,
   onZoomChange,
   onCoordsChange,
   onSvgModified,
@@ -837,7 +644,8 @@ export default function CadEditorCanvas({
   placedAmenities = [],
   setPlacedAmenities,
   conversionId,
-  projectId
+  projectId,
+  readOnly = false
 }) {
   const containerRef = useRef(null);
   const contentRef = useRef(null);
@@ -995,8 +803,18 @@ export default function CadEditorCanvas({
 
   useEffect(() => {
     const handleFitScreen = () => fitToScreen();
+    const handleZoomIn = () => setScale(transform.current.scale * 1.25);
+    const handleZoomOut = () => setScale(transform.current.scale / 1.25);
+    
     window.addEventListener('editor-fit-screen', handleFitScreen);
-    return () => window.removeEventListener('editor-fit-screen', handleFitScreen);
+    window.addEventListener('editor-zoom-in', handleZoomIn);
+    window.addEventListener('editor-zoom-out', handleZoomOut);
+    
+    return () => {
+      window.removeEventListener('editor-fit-screen', handleFitScreen);
+      window.removeEventListener('editor-zoom-in', handleZoomIn);
+      window.removeEventListener('editor-zoom-out', handleZoomOut);
+    };
   }, [fitToScreen]);
 
   useEffect(() => {
@@ -1018,7 +836,7 @@ export default function CadEditorCanvas({
   // Notify parent about selection changes so the sidebar can show shape properties
   useEffect(() => {
     if (onSelectionChange) {
-      const shapes = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)).filter(Boolean);
+      const shapes = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)?.shape).filter(Boolean);
       onSelectionChange(selectedShapeIds, shapes);
     }
   }, [selectedShapeIds, documentState.shapes]);
@@ -1033,6 +851,9 @@ export default function CadEditorCanvas({
           return shapes.map(s => {
             if (s.id === id) {
               const newAttrs = { ...s.attributes, ...patch };
+              Object.keys(patch).forEach(k => {
+                if (patch[k] === null) delete newAttrs[k];
+              });
               if (
                 s.type === 'path' &&
                 s.attributes['data-cad-type'] === 'arrow' &&
@@ -1108,7 +929,7 @@ export default function CadEditorCanvas({
   const groupSelected = () => {
     if (selectedShapeIds.length < 2) return;
     const groupId = `cad-group-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const children = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)).filter(Boolean);
+    const children = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)?.shape).filter(Boolean);
     let newShapes = [...documentState.shapes];
     for (const id of selectedShapeIds) {
       newShapes = deleteShapeDeep(newShapes, id);
@@ -1125,7 +946,7 @@ export default function CadEditorCanvas({
     let newShapes = [...documentState.shapes];
     const newIds = [];
     for (const id of selectedShapeIds) {
-      const shape = findShapeDeep(newShapes, id);
+      const shape = findShapeDeep(newShapes, id)?.shape;
       if (shape && shape.type === 'g' && shape.children?.length > 0) {
         newShapes = deleteShapeDeep(newShapes, id);
         for (const child of shape.children) {
@@ -1174,7 +995,7 @@ export default function CadEditorCanvas({
         e.preventDefault();
         let newShapes = [...documentState.shapes];
 
-        // Process each hit shape (in reverse index order to avoid shifting)
+        // Process each hit shape
         const hitsByShape = new Map();
         for (const hit of pdHits) {
           if (!hitsByShape.has(hit.shapeId)) {
@@ -1183,52 +1004,30 @@ export default function CadEditorCanvas({
           hitsByShape.get(hit.shapeId).push(...hit.hitIndices);
         }
 
-        for (const [shapeId, hitIndices] of hitsByShape) {
-          const shapeIdx = newShapes.findIndex(s => s.id === shapeId);
-          if (shapeIdx === -1) {
-            // Try to find in children (nested shapes)
-            const findInChildren = (shapes, id) => {
-              for (const s of shapes) {
-                if (s.id === id) return s;
-                if (s.children?.length) {
-                  const found = findInChildren(s.children, id);
-                  if (found) return found;
-                }
+        const replaceInTree = (shapes, targetId, replacementNodes) => {
+          const result = [];
+          for (const s of shapes) {
+            if (s.id === targetId) {
+              result.push(...replacementNodes);
+            } else {
+              if (s.children?.length) {
+                result.push({ ...s, children: replaceInTree(s.children, targetId, replacementNodes) });
+              } else {
+                result.push(s);
               }
-              return null;
-            };
-            const shape = findInChildren(newShapes, shapeId);
-            if (!shape) continue;
-
-            const replacements = applyPartialDelete(shape, hitIndices);
-            if (!replacements) continue;
-
-            // Replace in the nested tree
-            const replaceInTree = (shapes, targetId, replacements) => {
-              const result = [];
-              for (const s of shapes) {
-                if (s.id === targetId) {
-                  result.push(...replacements);
-                } else {
-                  if (s.children?.length) {
-                    result.push({ ...s, children: replaceInTree(s.children, targetId, replacements) });
-                  } else {
-                    result.push(s);
-                  }
-                }
-              }
-              return result;
-            };
-            newShapes = replaceInTree(newShapes, shapeId, replacements);
-            continue;
+            }
           }
+          return result;
+        };
 
-          const shape = newShapes[shapeIdx];
-          const replacements = applyPartialDelete(shape, hitIndices);
+        for (const [shapeId, hitIndices] of hitsByShape) {
+          const shapeResult = findShapeDeep(newShapes, shapeId);
+          if (!shapeResult) continue;
+
+          const replacements = applyPartialDelete(shapeResult.shape, hitIndices);
           if (!replacements) continue;
 
-          // Splice: remove original, insert replacements at same position
-          newShapes.splice(shapeIdx, 1, ...replacements);
+          newShapes = replaceInTree(newShapes, shapeId, replacements);
         }
 
         setDocumentState(prev => ({ ...prev, shapes: newShapes }));
@@ -1260,14 +1059,14 @@ export default function CadEditorCanvas({
         if (e.ctrlKey || e.metaKey) {
           if (e.key === 'c') {
             e.preventDefault();
-            const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)).filter(Boolean);
+            const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)?.shape).filter(Boolean);
             if (shapesToCopy.length > 0) {
               setClipboard(JSON.parse(JSON.stringify(shapesToCopy)));
             }
           }
           if (e.key === 'x') {
             e.preventDefault();
-            const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)).filter(Boolean);
+            const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)?.shape).filter(Boolean);
             if (shapesToCopy.length > 0) {
               setClipboard(JSON.parse(JSON.stringify(shapesToCopy)));
               deleteSelectedShape();
@@ -1275,7 +1074,7 @@ export default function CadEditorCanvas({
           }
           if (e.key === 'd') {
             e.preventDefault();
-            const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)).filter(Boolean);
+            const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)?.shape).filter(Boolean);
             shapesToCopy.forEach(s => duplicateShape(JSON.parse(JSON.stringify(s))));
           }
           if (e.key === 'g') {
@@ -1338,6 +1137,11 @@ export default function CadEditorCanvas({
             result.push(shape);
             continue;
           }
+          const isPlot = shape.attributes?.['data-plot-id'] || shape.attributes?.['plotId'] || shape.attributes?.['data-cad-type'] === 'plot';
+          if (isPlot) {
+            result.push(shape); // NEVER delete plot polygons
+            continue;
+          }
           const replacements = applyVectorErase(shape, circle);
           if (replacements !== null) {
             treeChanged = true;
@@ -1381,6 +1185,8 @@ export default function CadEditorCanvas({
       }
     }
 
+    if (readOnly) return;
+
     // ── Partial Delete: start marquee ──────────────────────────────────
     if (activeTool === 'partial_delete' && e.button === 0) {
       const coords = getSvgInternalCoords(e.clientX, e.clientY);
@@ -1396,6 +1202,46 @@ export default function CadEditorCanvas({
 
     // ── Vector Eraser: start erasing ───────────────────────────────────
     if (activeTool === 'vector_eraser' && e.button === 0) {
+      // Intercept plot clicks for resetting custom colors
+      const plotElement = e.target.closest('[data-plot-id]') || (e.target.getAttribute?.('data-plot-id') ? e.target : null);
+      if (plotElement) {
+        const shapeId = plotElement.id || resolveShapeId(plotElement);
+        if (shapeId) {
+          const shapeResult = findShapeDeep(documentState.shapes, shapeId);
+          if (shapeResult && shapeResult.shape.attributes?.['data-cad-custom-fill'] === 'true') {
+            const originalFill = shapeResult.shape.attributes['data-original-fill'];
+            const originalFillOpacity = shapeResult.shape.attributes['data-original-fill-opacity'];
+            
+            const newShape = { ...shapeResult.shape, attributes: { ...shapeResult.shape.attributes } };
+            
+            if (originalFill === 'MISSING') delete newShape.attributes['fill'];
+            else if (originalFill) newShape.attributes['fill'] = originalFill;
+            
+            if (originalFillOpacity === 'MISSING') delete newShape.attributes['fill-opacity'];
+            else if (originalFillOpacity) newShape.attributes['fill-opacity'] = originalFillOpacity;
+            
+            delete newShape.attributes['data-cad-custom-fill'];
+            delete newShape.attributes['data-original-fill'];
+            delete newShape.attributes['data-original-fill-opacity'];
+            
+            const updatedShapes = updateShapeAtPath(documentState.shapes, shapeResult.path, newShape);
+            setDocumentState(prev => ({ ...prev, shapes: updatedShapes }));
+            
+            if (onSvgModified) {
+              const svgString = serializeStateToSvgString(updatedShapes, documentState.viewBox);
+              setTimeout(() => {
+                internalUpdateRef.current = true;
+                onSvgModified(svgString);
+              }, 0);
+            }
+            
+            e.stopPropagation();
+            e.preventDefault();
+            return;
+          }
+        }
+      }
+
       const coords = getSvgInternalCoords(e.clientX, e.clientY);
       if (coords) {
         setVeCursorCoords(coords);
@@ -1465,16 +1311,36 @@ export default function CadEditorCanvas({
     }
   };
 
-  // Recursively find a shape in the tree
-  const findShapeDeep = (shapes, id) => {
-    for (const s of shapes) {
-      if (s.id === id) return s;
+  // Recursively find a shape in the tree, returning { shape, parent, path }
+  const findShapeDeep = (shapes, id, path = [], parent = null) => {
+    for (let i = 0; i < shapes.length; i++) {
+      const s = shapes[i];
+      if (s.id === id) return { shape: s, parent, path: [...path, i] };
       if (s.children && s.children.length > 0) {
-        const found = findShapeDeep(s.children, id);
+        const found = findShapeDeep(s.children, id, [...path, i, 'children'], s);
         if (found) return found;
       }
     }
     return null;
+  };
+
+  // Helper to safely update a nested shape at a given path immutably
+  const updateShapeAtPath = (shapes, path, updatedShape) => {
+    if (!path || path.length === 0) return shapes;
+    const updateRecursive = (currentShapes, currentPath) => {
+      if (currentPath.length === 1) {
+        const newShapes = [...currentShapes];
+        newShapes[currentPath[0]] = updatedShape;
+        return newShapes;
+      }
+      const [idx, childrenKey, ...restPath] = currentPath;
+      const newShapes = [...currentShapes];
+      const target = { ...newShapes[idx] };
+      target[childrenKey] = updateRecursive(target[childrenKey], restPath);
+      newShapes[idx] = target;
+      return newShapes;
+    };
+    return updateRecursive(shapes, path);
   };
 
   // Recursively delete a shape from the tree
@@ -1500,7 +1366,7 @@ export default function CadEditorCanvas({
       }
       el = el.parentElement;
     }
-    
+
     // Second pass: accept a <g> if that's all we have
     el = targetEl;
     while (el && el.tagName?.toLowerCase() !== 'svg') {
@@ -1527,6 +1393,7 @@ export default function CadEditorCanvas({
 
   const handleShapePointerDown = (e, shapeId) => {
     if (activeTool === 'eraser' && e.button === 0) {
+      if (readOnly) return;
       e.stopPropagation(); // Stop event from bubbling to parent groups or SVG background
       const newShapes = deleteShapeDeep(documentState.shapes, shapeId);
       setDocumentState(prev => ({ ...prev, shapes: newShapes }));
@@ -1542,6 +1409,7 @@ export default function CadEditorCanvas({
     const isShape = ['path', 'line', 'circle', 'ellipse', 'rect', 'polygon', 'polyline', 'text', 'tspan', 'use', 'g'].includes(tag);
 
     if (activeTool === 'paint_bucket' && e.button === 0) {
+      if (readOnly) return;
       // ── Paint Bucket ────────────────────────────────────────────────────
       const svgEl = svgRef.current?.querySelector('svg');
       if (!svgEl) { e.stopPropagation(); return; }
@@ -1549,28 +1417,18 @@ export default function CadEditorCanvas({
       // Always use the main document SVG — NOT the overlay SVG.
       // Verify we have the right element by checking it contains the DWG shapes.
       // If svgEl has no children, it means we somehow got the overlay SVG.
-      console.log('[PaintBucket] Active');
-      console.log('[PaintBucket] SVG element outerHTML (first 120 chars):', svgEl.outerHTML?.slice(0, 120));
-      console.log('[PaintBucket] SVG childElementCount:', svgEl.childElementCount);
 
       const clickSvg = getSvgInternalCoords(e.clientX, e.clientY);
-      console.log('[PaintBucket] Clicked Position (SVG):', clickSvg ? `${clickSvg.x.toFixed(2)}, ${clickSvg.y.toFixed(2)}` : '(unknown)');
-      console.log('[PaintBucket] Clicked element:', tag, target.id || '(no id)');
-      console.log('[PaintBucket] e.clientX:', e.clientX, 'e.clientY:', e.clientY);
 
       // Log the SVG coordinate system
       try {
         const sCTM = svgEl.getScreenCTM();
-        console.log('[PaintBucket] svgEl.getScreenCTM():', sCTM ? `a=${sCTM.a.toFixed(4)} b=${sCTM.b.toFixed(4)} c=${sCTM.c.toFixed(4)} d=${sCTM.d.toFixed(4)} e=${sCTM.e.toFixed(2)} f=${sCTM.f.toFixed(2)}` : 'null');
       } catch (_) { }
-      console.log('[PaintBucket] viewBox:', documentState.viewBox);
 
       // Find the smallest closed region containing the click (Shoelace area sort)
       const result = paintBucketFindRegion(svgEl, e.clientX, e.clientY);
 
       // ── Full debug log ──────────────────────────────────────────────────
-      console.log('[PaintBucket] Total Closed Entities scanned:', result?.totalClosed ?? 0);
-      console.log('[PaintBucket] Containing Entities:', result?.allCandidates?.length ?? 0);
       if (result?.allCandidates) {
         result.allCandidates.forEach((c, i) => {
           const el = c.element;
@@ -1585,15 +1443,11 @@ export default function CadEditorCanvas({
       }
 
       if (!result) {
-        console.log('[PaintBucket] FAIL: No closed region contains the clicked point.');
         e.stopPropagation();
         return;
       }
 
       const { element: boundaryEl, area, bbox } = result;
-      console.log('[PaintBucket] Selected Entity:', boundaryEl.id || '(no id)', boundaryEl.tagName);
-      console.log('[PaintBucket] Reason for Selection: Smallest actual area =', area.toFixed(2), 'among', result.allCandidates.length, 'containing regions');
-      console.log('[PaintBucket] Bounding Box:', `${bbox.w.toFixed(1)}×${bbox.h.toFixed(1)}`);
 
       // ── Boundary highlight (350ms flash) ───────────────────────────────
       const prevStroke = boundaryEl.getAttribute('stroke');
@@ -1614,14 +1468,9 @@ export default function CadEditorCanvas({
       // ── Extract exact geometry (never approximate) ──────────────────────
       const geometry = paintBucketExtractGeometry(boundaryEl, svgEl);
       if (!geometry) {
-        console.log('[PaintBucket] FAIL: Could not extract geometry from', boundaryEl.tagName);
         e.stopPropagation();
         return;
       }
-
-      console.log('[PaintBucket] Extracted geometry: type =', geometry.type,
-        ' attrs =', JSON.stringify(geometry.attributes),
-        ' transform =', geometry.transform || '(none)');
 
       // ── Replace or create hatch ─────────────────────────────────────────
       // Use the boundary element's ID for reliable duplicate detection.
@@ -1630,12 +1479,37 @@ export default function CadEditorCanvas({
       // resolveShapeId is a fallback for user-drawn shapes that went through
       // parseSvgStringToState and have a documentState-tracked id instead.
       const boundaryRef = boundaryEl.id || resolveShapeId(boundaryEl) || '';
-      const existingIdx = boundaryRef
-        ? documentState.shapes.findIndex(
-          s => s.attributes?.['data-cad-type'] === 'hatch' &&
-            s.attributes?.['data-boundary-ref'] === boundaryRef
-        )
-        : -1;
+        
+        // Added logic: Update existing shape directly if it is hit!
+        const existingShapeResult = boundaryRef ? findShapeDeep(documentState.shapes, boundaryRef) : null;
+        if (existingShapeResult) {
+          const currentAttrs = existingShapeResult.shape.attributes;
+          const originalFill = currentAttrs['data-original-fill'] ?? (currentAttrs.fill !== undefined ? currentAttrs.fill : 'MISSING');
+          const originalFillOpacity = currentAttrs['data-original-fill-opacity'] ?? (currentAttrs['fill-opacity'] !== undefined ? currentAttrs['fill-opacity'] : 'MISSING');
+          
+          const updatedShapes = updateShapeAtPath(documentState.shapes, existingShapeResult.path, {
+            ...existingShapeResult.shape,
+            attributes: { 
+              ...currentAttrs, 
+              fill: fillColor, 
+              'fill-opacity': String(fillOpacity), 
+              'data-cad-custom-fill': 'true',
+              'data-original-fill': originalFill,
+              'data-original-fill-opacity': originalFillOpacity
+            }
+          });
+          setDocumentState(prev => ({ ...prev, shapes: updatedShapes }));
+          notifySvgModified(serializeStateToSvgString(updatedShapes, documentState.viewBox));
+          e.stopPropagation();
+          return;
+        }
+
+        const existingIdx = boundaryRef
+          ? documentState.shapes.findIndex(
+            s => s.attributes?.['data-cad-type'] === 'hatch' &&
+              s.attributes?.['data-boundary-ref'] === boundaryRef
+          )
+          : -1;
 
       if (existingIdx !== -1) {
         const updatedShapes = documentState.shapes.map((s, i) =>
@@ -1645,20 +1519,21 @@ export default function CadEditorCanvas({
         );
         setDocumentState(prev => ({ ...prev, shapes: updatedShapes }));
         notifySvgModified(serializeStateToSvgString(updatedShapes, documentState.viewBox));
-        console.log('[PaintBucket] Updated existing hatch color →', fillColor);
-        console.log('[PaintBucket] Save: queued via onSvgModified ✓');
         e.stopPropagation();
         return;
       }
 
       // Prepend new hatch so it renders below all DWG geometry
       const hatchId = `hatch-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-      const hatchShape = {
-        id: hatchId,
-        type: geometry.type,
-        attributes: {
-          ...geometry.attributes,
-          fill: fillColor,
+      const hatchAttributes = { ...geometry.attributes };
+        delete hatchAttributes['data-plot-id'];
+
+        const hatchShape = {
+          id: hatchId,
+          type: geometry.type,
+          attributes: {
+            ...hatchAttributes,
+            fill: fillColor,
           'fill-opacity': String(fillOpacity),
           stroke: 'none',
           'data-cad-type': 'hatch',
@@ -1673,8 +1548,6 @@ export default function CadEditorCanvas({
       setDocumentState(prev => ({ ...prev, shapes: newShapes }));
       notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
 
-      console.log('[PaintBucket] Fill applied: ID =', hatchId, ' type =', geometry.type, ' color =', fillColor, ' opacity =', fillOpacity);
-      console.log('[PaintBucket] Save: queued via onSvgModified ✓');
       e.stopPropagation();
     } else if (e.button === 0) {
       let shapeId = null;
@@ -1722,7 +1595,8 @@ export default function CadEditorCanvas({
 
         // Double click to edit text
         if ((tag === 'text' || tag === 'tspan') && e.detail === 2) {
-          const shape = findShapeDeep(documentState.shapes, shapeId);
+          if (readOnly) return;
+          const shape = findShapeDeep(documentState.shapes, shapeId)?.shape;
           if (shape) {
             const internalCoords = getSvgInternalCoords(e.clientX, e.clientY);
             setTextInput({
@@ -1954,6 +1828,7 @@ export default function CadEditorCanvas({
   };
 
   const handlePointerUp = (e) => {
+    if (readOnly) return;
     if (activeTool === 'draw_curve' && drawStep === 2 && drawStart && drawEnd) {
       const internalCoords = getSvgInternalCoords(e.clientX, e.clientY) || currentDrawCoords;
       const midX = (drawStart.x + drawEnd.x) / 2;
@@ -2183,6 +2058,8 @@ export default function CadEditorCanvas({
                   onPointerDown={handleShapePointerDown}
                   plots={plots}
                   statuses={statuses}
+                  showPlotStatus={showPlotStatus}
+                  readOnly={readOnly}
                 />
               ))}
               <PlotLabelsOverlay
@@ -2191,6 +2068,8 @@ export default function CadEditorCanvas({
                 scale={transform.current.scale}
                 plots={plots}
                 onLabelDragEnd={onLabelDragEnd}
+                readOnly={readOnly}
+                selectedShapeIds={selectedShapeIds}
               />
               <AmenitiesOverlay
                 placedAmenities={placedAmenities}
@@ -2327,7 +2206,7 @@ export default function CadEditorCanvas({
                   />
                 )}
 
-                {selectedShapeIds.length === 1 && (
+                {!readOnly && selectedShapeIds.length === 1 && (
                   <TransformControls
                     shape={findShapeDeep(documentState.shapes, selectedShapeIds[0])}
                     shapeId={selectedShapeIds[0]}
@@ -2347,11 +2226,22 @@ export default function CadEditorCanvas({
                     }}
                   />
                 )}
-                {selectedShapeIds.length > 1 && (
+                {!readOnly && selectedShapeIds.length > 1 && (
                   <MultiSelectOverlay
                     selectedShapeIds={selectedShapeIds}
                     documentState={documentState}
                     svgRef={svgRef}
+                    scale={transform.current.scale}
+                  />
+                )}
+                {readOnly && selectedShapeIds.length === 1 && (
+                  <SelectedPlotGeometryOverlay
+                    selectedShapeId={selectedShapeIds[0]}
+                    svgRef={svgRef}
+                    plots={plots}
+                    statuses={statuses}
+                    showPlotStatus={showPlotStatus}
+                  readOnly={readOnly}
                     scale={transform.current.scale}
                   />
                 )}

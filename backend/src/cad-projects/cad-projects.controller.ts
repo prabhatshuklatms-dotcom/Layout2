@@ -15,6 +15,11 @@ export class CadProjectsController {
     return this.cadProjectsService.findAll();
   }
 
+  @Get('public')
+  findPublic() {
+    return this.cadProjectsService.findPublic();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.cadProjectsService.findOne(+id);

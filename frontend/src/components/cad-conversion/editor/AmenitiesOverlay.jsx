@@ -149,7 +149,7 @@ export default function AmenitiesOverlay({
   };
 
   return (
-    <g>
+    <g id="editor-amenities">
       {placedAmenities.map(placement => {
         const master = masterAmenities.find(m => m.id === placement.amenityId);
         if (!master) return null;
@@ -183,7 +183,7 @@ export default function AmenitiesOverlay({
             
             {/* Transform Controls */}
             {isSelected && (
-              <g>
+              <g data-no-export="true">
                 {/* Bounding Box */}
                 <rect 
                   x={-w/2} y={-h/2} 

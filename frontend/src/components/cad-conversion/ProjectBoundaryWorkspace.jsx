@@ -7,7 +7,8 @@ import dynamic from 'next/dynamic';
 import { MapPin, ArrowLeft, Save, Trash2, Undo, Redo, Maximize, MousePointer2, Hexagon, Loader2, Edit2, Layers, Eye, EyeOff } from 'lucide-react';
 import area from '@turf/area';
 import { polygon as turfPolygon } from '@turf/helpers';
-import { getProjectBoundaries, createProjectBoundary, updateProjectBoundary, deleteProjectBoundary, getCadConversions, updateCadConversion } from '@/lib/api';
+import { getProjectBoundaries, createProjectBoundary, updateProjectBoundary, deleteProjectBoundary, getCadConversions, updateCadConversion, getProjectPlots } from '@/lib/api';
+import Swal from 'sweetalert2';
 
 const LeafletMap = dynamic(() => import('@/components/map/LeafletMap'), { ssr: false });
 import { BOUNDARY_DRAW_MODE } from '@/components/map/constants';
@@ -44,7 +45,7 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
 
 
   const [layouts, setLayouts] = useState([]);
-
+  const [plots, setPlots] = useState([]);
   useEffect(() => {
     if (projectId) {
       // Fetch boundaries and conversions independently so one failure
@@ -76,6 +77,10 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
           }
         })
         .catch((err) => console.error("Failed to load CAD conversions:", err));
+        
+      getProjectPlots(projectId)
+        .then((data) => setPlots(data || []))
+        .catch((err) => console.error("Failed to load plots:", err));
     }
   }, [projectId, pushHistory]);
 
@@ -140,6 +145,32 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
     }
   }, []);
 
+  const handleRemoveLayout = async (id) => {
+    const result = await Swal.fire({
+      title: 'Remove Layout?',
+      text: 'Remove this layout from the map?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#3f3f46',
+      confirmButtonText: 'Yes, Remove',
+      background: '#18181b',
+      color: '#fff'
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const updates = { mapLatitude: null, mapLongitude: null, mapScale: 1, mapRotation: 0 };
+        setLayouts(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l));
+        await updateCadConversion(id, updates);
+        Swal.fire({ title: 'Removed!', text: 'Layout has been removed from the map.', icon: 'success', background: '#18181b', color: '#fff', timer: 1500, showConfirmButton: false });
+      } catch (err) {
+        console.error("Failed to remove layout placement", err);
+        Swal.fire({ title: 'Error', text: 'Failed to remove layout placement', icon: 'error', background: '#18181b', color: '#fff' });
+      }
+    }
+  };
+
   const handleSave = async () => {
     if (!boundary || !boundary.geoJson) return;
     setSaving(true);
@@ -189,7 +220,19 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
 
   const handleDelete = async () => {
     if (boundary?.id) {
-      if (!confirm('Are you sure you want to delete this boundary?')) return;
+      const result = await Swal.fire({
+        title: 'Delete Boundary?',
+        text: 'Are you sure you want to delete this boundary?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#3f3f46',
+        confirmButtonText: 'Yes, Delete',
+        background: '#18181b',
+        color: '#fff'
+      });
+      if (!result.isConfirmed) return;
+      
       setSaving(true);
       try {
         await deleteProjectBoundary(boundary.id);
@@ -197,8 +240,10 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
         setHistory([]);
         setHistoryIndex(-1);
         setDrawMode(BOUNDARY_DRAW_MODE.POINTER);
+        Swal.fire({ title: 'Deleted!', text: 'Boundary has been deleted.', icon: 'success', background: '#18181b', color: '#fff', timer: 1500, showConfirmButton: false });
       } catch (err) {
         console.error('Failed to delete boundary', err);
+        Swal.fire({ title: 'Error', text: 'Failed to delete boundary', icon: 'error', background: '#18181b', color: '#fff' });
       } finally {
         setSaving(false);
       }
@@ -291,9 +336,20 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
           </button>
           <button 
             className={`p-2 rounded ${drawMode === BOUNDARY_DRAW_MODE.POLYGON ? 'bg-emerald-600 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
-            onClick={() => {
+            onClick={async () => {
               if (boundary) {
-                if (confirm('Drawing a new polygon will discard the current boundary. Continue?')) {
+                const result = await Swal.fire({
+                  title: 'Draw New Polygon?',
+                  text: 'Drawing a new polygon will discard the current boundary. Continue?',
+                  icon: 'warning',
+                  showCancelButton: true,
+                  confirmButtonColor: '#10b981',
+                  cancelButtonColor: '#3f3f46',
+                  confirmButtonText: 'Yes, Continue',
+                  background: '#18181b',
+                  color: '#fff'
+                });
+                if (result.isConfirmed) {
                   setBoundary(null);
                   setDrawMode(BOUNDARY_DRAW_MODE.POLYGON);
                 }
@@ -364,11 +420,21 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
                   <p className="text-sm font-medium text-zinc-200 truncate" title={layout.originalFileName}>
                     {layout.originalFileName}
                   </p>
-                  {layout.mapLatitude ? (
-                    <span className="text-[10px] text-emerald-500 uppercase tracking-wider mt-1 block">Placed on map</span>
-                  ) : (
-                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider mt-1 block">Not placed</span>
-                  )}
+                  <div className="flex items-center justify-between mt-1">
+                    {layout.mapLatitude ? (
+                      <>
+                        <span className="text-[10px] text-emerald-500 uppercase tracking-wider block">Placed on map</span>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleRemoveLayout(layout.id); }}
+                          className="text-[10px] text-zinc-400 hover:text-red-400 uppercase tracking-wider transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Not placed</span>
+                    )}
+                  </div>
                 </div>
               ))
             )}
@@ -434,6 +500,7 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
               onMoveComplete={onMoveComplete}
               initialBounds={boundary?.latMin ? [[boundary.latMin, boundary.lngMin], [boundary.latMax, boundary.lngMax]] : null}
               layouts={layouts}
+              plots={plots}
               onLayoutDrop={handleLayoutDrop}
               onLayoutUpdate={handleLayoutUpdate}
               className="w-full h-full"

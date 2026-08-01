@@ -115,75 +115,6 @@ export class CadConversionService {
       }
     });
 
-    // 4. Generate plot label text elements
-    if (plots.length > 0) {
-      const labelsGroup = doc.createElementNS('http://www.w3.org/2000/svg', 'g');
-      labelsGroup.setAttribute('id', 'composite-plot-labels');
-
-      plotElements.forEach((el: any) => {
-        const plotId = parseInt(el.getAttribute('data-plot-id'));
-        const plot = plots.find(p => p.id === plotId);
-        if (!plot) return;
-
-        // Compute centroid from bounding box (server-side approximation)
-        const labelDx = parseFloat(el.getAttribute('data-label-dx') || '0');
-        const labelDy = parseFloat(el.getAttribute('data-label-dy') || '0');
-        const fontSize = parseFloat(el.getAttribute('data-label-fontsize') || '14');
-        const fontFamily = el.getAttribute('data-label-fontfamily') || 'sans-serif';
-        const color = el.getAttribute('data-label-color') || '#ffffff';
-        const showArea = el.getAttribute('data-label-show-area') !== 'false';
-        const rotation = parseFloat(el.getAttribute('data-label-rotation') || '0');
-        const align = el.getAttribute('data-label-align') || 'middle';
-
-        // Approximate centroid from element geometry
-        const centroid = this.approximateCentroid(el);
-        if (!centroid) return;
-
-        const cx = centroid.x + labelDx;
-        const cy = centroid.y + labelDy;
-
-        // Build label lines
-        const lines: { text: string; size: number; weight: string }[] = [];
-        lines.push({ text: plot.plotNumber || '?', size: fontSize * 1.5, weight: 'bold' });
-        if (showArea) {
-          if (plot.areaSqMeter) lines.push({ text: `${plot.areaSqMeter} m²`, size: fontSize * 0.9, weight: 'normal' });
-          if (plot.areaSqYard) lines.push({ text: `${plot.areaSqYard} yd²`, size: fontSize * 0.9, weight: 'normal' });
-        }
-
-        // Calculate vertical positions
-        let currentY = 0;
-        const lineData = lines.map(l => {
-          const y = currentY;
-          currentY += l.size * 1.3;
-          return { ...l, y };
-        });
-        const totalHeight = currentY;
-        // Center vertically
-        lineData.forEach(l => {
-          l.y -= (totalHeight / 2) - (l.size * 0.4);
-        });
-
-        const labelGroup = doc.createElementNS('http://www.w3.org/2000/svg', 'g');
-        labelGroup.setAttribute('transform', `translate(${cx}, ${cy}) rotate(${rotation})`);
-
-        for (const l of lineData) {
-          const textEl = doc.createElementNS('http://www.w3.org/2000/svg', 'text');
-          textEl.setAttribute('x', '0');
-          textEl.setAttribute('y', String(l.y));
-          textEl.setAttribute('text-anchor', align);
-          textEl.setAttribute('fill', color);
-          textEl.setAttribute('font-size', String(l.size));
-          textEl.setAttribute('font-weight', l.weight);
-          textEl.setAttribute('font-family', fontFamily);
-          textEl.textContent = l.text;
-          labelGroup.appendChild(textEl);
-        }
-
-        labelsGroup.appendChild(labelGroup);
-      });
-
-      svgEl.appendChild(labelsGroup);
-    }
 
     // 5. Embed amenity images
     if (placements.length > 0) {
@@ -255,6 +186,7 @@ export class CadConversionService {
     vertices: [number, number][];
     centroid: [number, number];
     bounds: { left: number; top: number; width: number; height: number };
+    viewBox: { width: number; height: number };
   } {
     // 1. Parse viewBox
     const vbAttr = svgEl.getAttribute('viewBox');
@@ -269,8 +201,13 @@ export class CadConversionService {
     // 2. Collect ALL coordinate points from visible SVG geometry
     const points: [number, number][] = [];
 
+    const marginX = vbW * 0.1;
+    const marginY = vbH * 0.1;
     const addPoint = (x: number, y: number) => {
       if (isNaN(x) || isNaN(y) || !isFinite(x) || !isFinite(y)) return;
+      // Filter out garbage geometry that lies far outside the site plan's viewBox
+      if (x < vbX - marginX || x > vbX + vbW + marginX) return;
+      if (y < vbY - marginY || y > vbY + vbH + marginY) return;
       points.push([x, y]);
     };
 
@@ -329,7 +266,8 @@ export class CadConversionService {
       return {
         vertices: [[0, 0], [1, 0], [1, 1], [0, 1]],
         centroid: [0.5, 0.5],
-        bounds: { left: 0, top: 0, width: 1, height: 1 }
+        bounds: { left: 0, top: 0, width: 1, height: 1 },
+        viewBox: { width: vbW, height: vbH }
       };
     }
 
@@ -367,6 +305,10 @@ export class CadConversionService {
         top:    (minY - vbY) / vbH,
         width:  (maxX - minX) / vbW,
         height: (maxY - minY) / vbH
+      },
+      viewBox: {
+        width: vbW,
+        height: vbH
       }
     };
   }
@@ -524,50 +466,7 @@ export class CadConversionService {
     return [cx, cy];
   }
 
-  // Approximate centroid from SVG element attributes (server-side, no getBBox)
-  private approximateCentroid(el: any): { x: number; y: number } | null {
-    const tag = el.tagName?.toLowerCase();
-    try {
-      if (tag === 'rect') {
-        const x = parseFloat(el.getAttribute('x') || '0');
-        const y = parseFloat(el.getAttribute('y') || '0');
-        const w = parseFloat(el.getAttribute('width') || '0');
-        const h = parseFloat(el.getAttribute('height') || '0');
-        return { x: x + w / 2, y: y + h / 2 };
-      }
-      if (tag === 'circle' || tag === 'ellipse') {
-        return {
-          x: parseFloat(el.getAttribute('cx') || '0'),
-          y: parseFloat(el.getAttribute('cy') || '0'),
-        };
-      }
-      if (tag === 'polygon' || tag === 'polyline') {
-        const pts = (el.getAttribute('points') || '').trim().split(/[\s,]+/).filter(Boolean);
-        if (pts.length < 4) return null;
-        let sumX = 0, sumY = 0, count = 0;
-        for (let i = 0; i + 1 < pts.length; i += 2) {
-          sumX += parseFloat(pts[i]);
-          sumY += parseFloat(pts[i + 1]);
-          count++;
-        }
-        return count > 0 ? { x: sumX / count, y: sumY / count } : null;
-      }
-      if (tag === 'path') {
-        // For paths, parse M/L/C coordinates for a rough centroid
-        const d = el.getAttribute('d') || '';
-        const nums = d.match(/[-+]?\d*\.?\d+/g);
-        if (!nums || nums.length < 2) return null;
-        let sumX = 0, sumY = 0, count = 0;
-        for (let i = 0; i + 1 < nums.length; i += 2) {
-          sumX += parseFloat(nums[i]);
-          sumY += parseFloat(nums[i + 1]);
-          count++;
-        }
-        return count > 0 ? { x: sumX / count, y: sumY / count } : null;
-      }
-    } catch (e) { }
-    return null;
-  }
+
 }
 
 

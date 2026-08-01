@@ -32,6 +32,7 @@
     "react-pdf": "^10.4.1",
     "react-virtuoso": "^4.18.10",
     "react-zoom-pan-pinch": "^4.0.3",
+    "sweetalert2": "^11.26.25",
     "use-image": "^1.1.4",
     "uuid": "^14.0.1",
     "zustand": "^5.0.14"

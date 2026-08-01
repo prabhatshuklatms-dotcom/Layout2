@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { getAmenities, createAmenity, updateAmenity, deleteAmenity, uploadAmenityIcon } from '@/lib/api';
 import { Plus, Edit2, Trash2, Image as ImageIcon } from 'lucide-react';
 import Link from 'next/link';
+import Swal from 'sweetalert2';
 
 export default function AmenitiesMasterPage() {
   const [amenities, setAmenities] = useState([]);
@@ -82,12 +83,25 @@ export default function AmenitiesMasterPage() {
   };
 
   const handleDelete = async (id) => {
-    if (confirm('Are you sure you want to delete this amenity?')) {
+    const result = await Swal.fire({
+      title: 'Delete Amenity?',
+      text: 'Are you sure you want to delete this amenity? This action cannot be undone.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#3f3f46',
+      confirmButtonText: 'Yes, Delete',
+      background: '#18181b',
+      color: '#fff'
+    });
+
+    if (result.isConfirmed) {
       try {
         await deleteAmenity(id);
+        Swal.fire({ title: 'Deleted!', text: 'Amenity has been deleted.', icon: 'success', background: '#18181b', color: '#fff' });
         fetchAmenities();
       } catch (err) {
-        alert('Failed to delete');
+        Swal.fire({ title: 'Error', text: 'Failed to delete amenity', icon: 'error', background: '#18181b', color: '#fff' });
       }
     }
   };

@@ -7,6 +7,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum PlotType {
+  RECTANGLE
+  SQUARE
+  TRIANGLE
+  TRAPEZIUM
+  CORNER
+  CURVED
+  IRREGULAR
+  CUSTOM
+}
+
 model CadProject {
   id          Int             @id @default(autoincrement())
   name        String          @unique
@@ -64,6 +75,7 @@ model CadConversion {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   amenityPlacements AmenityPlacement[]
+  plots            ProjectPlot[]
 }
 
 model Amenity {
@@ -101,8 +113,8 @@ model ProjectPlot {
   projectId   Int
   project     CadProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   plotNumber  String
-  width       Float?
-  height      Float?
+  plotType    PlotType    @default(RECTANGLE)
+  dimensions  Json?
   areaSqFt    Float?
   areaSqYard  Float?
   areaSqMeter Float?
@@ -110,9 +122,17 @@ model ProjectPlot {
   status      PlotStatus? @relation(fields: [statusId], references: [id])
   description String?
   remarks     String?
-  cadRegionId String? // To link with specific regions in the CAD editor SVG
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  cadRegionId   String? // To link with specific regions in the CAD editor SVG
+  conversionId  Int?
+  conversion    CadConversion? @relation(fields: [conversionId], references: [id], onDelete: SetNull)
+  cadObjectType String?
+  x             Float?
+  y             Float?
+  rotation      Float?
+  scale         Float?
+  metadata      Json?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@unique([projectId, plotNumber])
 }

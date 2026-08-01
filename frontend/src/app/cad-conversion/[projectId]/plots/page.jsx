@@ -1,11 +1,85 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { getProjectPlots, createProjectPlot, updateProjectPlot, deleteProjectPlot, getProjectPlotStatuses, getCadProject } from '@/lib/api';
+import { getProjectPlots, createProjectPlot, createProjectPlotsBulk, updateProjectPlot, updateProjectPlotAssignment, deleteProjectPlot, getProjectPlotStatuses, getCadProject } from '@/lib/api';
 import { Plus, Edit2, Trash2, Search, Filter, ArrowLeft } from 'lucide-react';
 import { getContrastYIQ } from '@/lib/utils';
+import { PLOT_TYPE_CONFIG } from '@/lib/plotTypeConfig';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { use } from 'react';
+import Swal from 'sweetalert2';
+
+const DimensionRow = ({ dim, dIdx, plotType, updateDimensions, dimensions, onRemove }) => {
+  const isCustomLabel = PLOT_TYPE_CONFIG[plotType]?.customLabels;
+  const hideLabels = PLOT_TYPE_CONFIG[plotType]?.hideLabels;
+  const isDynamic = PLOT_TYPE_CONFIG[plotType]?.isDynamic;
+  
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 items-center bg-zinc-950/40 p-3 rounded-lg border border-zinc-800/60 transition-all hover:border-zinc-700/80">
+      {/* Label */}
+      {isCustomLabel ? (
+        <input 
+          type="text" 
+          value={dim.label} 
+          onChange={e => {
+            const newDims = [...dimensions];
+            newDims[dIdx].label = e.target.value;
+            updateDimensions(newDims);
+          }}
+          className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-sm text-zinc-300 focus:outline-none focus:border-indigo-500 transition-colors" 
+          placeholder="Label (e.g. North)" 
+        />
+      ) : !hideLabels ? (
+        <div className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-sm text-zinc-400 font-medium flex items-center shadow-inner">
+          {dim.label}
+        </div>
+      ) : (
+        <div className="hidden xl:block"></div>
+      )}
+
+      {/* Value */}
+      <input 
+        type="number" step="0.01" 
+        value={dim.value} 
+        onChange={e => {
+          const newDims = [...dimensions];
+          newDims[dIdx].value = e.target.value;
+          updateDimensions(newDims);
+        }}
+        className={`w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-sm focus:outline-none focus:border-indigo-500 transition-colors ${hideLabels ? 'xl:col-span-2' : ''}`}
+        placeholder="Value (e.g. 10.5)" 
+      />
+
+      {/* Unit */}
+      <input 
+        type="text" 
+        value={dim.unit !== undefined ? dim.unit : (dim.defaultUnit || 'm')} 
+        onChange={e => {
+          const newDims = [...dimensions];
+          newDims[dIdx].unit = e.target.value;
+          updateDimensions(newDims);
+        }}
+        className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-md text-sm text-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors" 
+        placeholder="Unit (m, ft)"
+      />
+
+      {/* Delete */}
+      {isDynamic ? (
+        <button 
+          type="button" 
+          onClick={onRemove} 
+          className="flex items-center justify-center w-full px-3 py-2 text-zinc-400 hover:text-red-400 bg-zinc-900/50 hover:bg-red-500/10 rounded-md transition-colors border border-zinc-800 hover:border-red-500/30"
+        >
+          <Trash2 size={16} className="mr-2 xl:mr-0 xl:hidden" />
+          <span className="xl:hidden">Remove</span>
+          <Trash2 size={16} className="hidden xl:block" />
+        </button>
+      ) : (
+        <div className="hidden xl:block"></div>
+      )}
+    </div>
+  );
+};
 
 export default function ProjectPlotsPage({ params }) {
   const unwrappedParams = use(params);
@@ -30,7 +104,14 @@ export default function ProjectPlotsPage({ params }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   
-  const emptyForm = { plotNumber: '', width: '', height: '', areaSqFt: '', statusId: '', description: '' };
+  const emptyForm = { 
+    plotNumber: '', 
+    plotType: 'RECTANGLE',
+    dimensions: PLOT_TYPE_CONFIG['RECTANGLE'].dimensions.map(d => ({ ...d, value: '' })),
+    areaSqFt: '', 
+    statusId: '', 
+    description: '' 
+  };
   const [formList, setFormList] = useState([emptyForm]);
 
   useEffect(() => {
@@ -62,29 +143,49 @@ export default function ProjectPlotsPage({ params }) {
         const formData = formList[0];
         const payload = {
           ...formData,
-          width: formData.width ? parseFloat(formData.width) : null,
-          height: formData.height ? parseFloat(formData.height) : null,
+          dimensions: formData.dimensions.map(d => ({ ...d, value: d.value ? parseFloat(d.value) : null })),
           areaSqFt: formData.areaSqFt ? parseFloat(formData.areaSqFt) : null,
           statusId: formData.statusId ? parseInt(formData.statusId) : null
         };
+        delete payload.width;
+        delete payload.height;
         await updateProjectPlot(projectId, editingId, payload);
       } else {
-        const promises = formList.map(formData => {
-          const payload = {
+        const payloads = formList.map(formData => {
+          const p = {
             ...formData,
-            width: formData.width ? parseFloat(formData.width) : null,
-            height: formData.height ? parseFloat(formData.height) : null,
+            dimensions: formData.dimensions.map(d => ({ ...d, value: d.value ? parseFloat(d.value) : null })),
             areaSqFt: formData.areaSqFt ? parseFloat(formData.areaSqFt) : null,
             statusId: formData.statusId ? parseInt(formData.statusId) : null
           };
-          return createProjectPlot(projectId, payload);
+          delete p.width;
+          delete p.height;
+          return p;
         });
-        await Promise.all(promises);
+        await createProjectPlotsBulk(projectId, payloads);
       }
       setIsModalOpen(false);
       fetchData();
     } catch (err) {
-      alert('Failed to save plot(s)');
+      if (err.response?.failedPlots && err.response.failedPlots.length > 0) {
+        const plotListHtml = err.response.failedPlots
+          .map(p => `<li><strong>${p.plotNumber}</strong>: ${p.reason}</li>`)
+          .join('');
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed to Save Plots',
+          html: `<p>${err.response.reason || err.message}</p><ul>${plotListHtml}</ul>`,
+          customClass: {
+            htmlContainer: 'text-left'
+          }
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: err.response?.reason || err.message || 'Failed to save plot(s)'
+        });
+      }
     }
   };
 
@@ -93,8 +194,10 @@ export default function ProjectPlotsPage({ params }) {
       setEditingId(plot.id);
       setFormList([{
         plotNumber: plot.plotNumber,
-        width: plot.width || '',
-        height: plot.height || '',
+        plotType: plot.plotType || 'RECTANGLE',
+        dimensions: (plot.dimensions && plot.dimensions.length > 0) 
+          ? plot.dimensions 
+          : PLOT_TYPE_CONFIG[plot.plotType || 'RECTANGLE']?.dimensions.map(d => ({ ...d, value: '' })) || [],
         areaSqFt: plot.areaSqFt || '',
         statusId: plot.statusId || '',
         description: plot.description || ''
@@ -110,13 +213,77 @@ export default function ProjectPlotsPage({ params }) {
   };
 
   const handleDelete = async (id) => {
-    if (confirm('Are you sure you want to delete this plot?')) {
+    const result = await Swal.fire({
+      title: 'Delete Plot?',
+      text: 'Are you sure you want to delete this plot? This action cannot be undone.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#3f3f46',
+      confirmButtonText: 'Yes, Delete',
+      background: '#18181b',
+      color: '#fff'
+    });
+
+    if (result.isConfirmed) {
       try {
         await deleteProjectPlot(projectId, id);
+        Swal.fire({ title: 'Deleted!', text: 'Plot has been deleted.', icon: 'success', background: '#18181b', color: '#fff' });
         fetchData();
       } catch (err) {
-        alert('Failed to delete plot');
+        Swal.fire({ title: 'Error', text: 'Failed to delete plot', icon: 'error', background: '#18181b', color: '#fff' });
       }
+    }
+  };
+
+  const handleAssignmentChange = async (plot, newValue) => {
+    try {
+      let cadRegionId = null;
+
+      if (newValue === 'assigned') {
+        const { value: manualId } = await Swal.fire({
+          title: 'Assign CAD Region',
+          input: 'text',
+          inputLabel: 'Enter the CAD shape ID (e.g., shape-1234)',
+          inputPlaceholder: 'CAD Region ID',
+          showCancelButton: true,
+          inputValidator: (value) => {
+            if (!value) {
+              return 'You need to write something!';
+            }
+          }
+        });
+
+        if (!manualId) {
+          // Force a re-render of this select by temporarily tweaking state
+          setPlots([...plots]);
+          return; // user cancelled
+        }
+        cadRegionId = manualId;
+      }
+
+      // Optimistic update
+      setPlots(prev => prev.map(p => p.id === plot.id ? { ...p, cadRegionId } : p));
+
+      await updateProjectPlotAssignment(projectId, plot.id, { cadRegionId });
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Success',
+        text: 'Assignment updated successfully.',
+        timer: 2000,
+        showConfirmButton: false
+      });
+      
+    } catch (error) {
+      console.error(error);
+      // Revert optimistic update
+      fetchData();
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to update assignment.'
+      });
     }
   };
 
@@ -240,8 +407,8 @@ export default function ProjectPlotsPage({ params }) {
               <thead className="bg-zinc-950/50 border-b border-zinc-800">
                 <tr>
                   <th className="px-6 py-4 font-medium text-zinc-400 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('plotNumber')}>Plot Number {sortConfig.key === 'plotNumber' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="px-6 py-4 font-medium text-zinc-400 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('width')}>Width {sortConfig.key === 'width' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
-                  <th className="px-6 py-4 font-medium text-zinc-400 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('height')}>Height / Depth {sortConfig.key === 'height' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  <th className="px-6 py-4 font-medium text-zinc-400 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('plotType')}>Plot Type {sortConfig.key === 'plotType' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
+                  <th className="px-6 py-4 font-medium text-zinc-400">Dimensions</th>
                   <th className="px-6 py-4 font-medium text-zinc-400 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('areaSqFt')}>Area (Sq. Ft.) {sortConfig.key === 'areaSqFt' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                   <th className="px-6 py-4 font-medium text-zinc-400 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('status')}>Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
                   <th className="px-6 py-4 font-medium text-zinc-400 cursor-pointer hover:text-white transition-colors" onClick={() => handleSort('cadRegionId')}>Assignment {sortConfig.key === 'cadRegionId' && (sortConfig.direction === 'asc' ? '↑' : '↓')}</th>
@@ -257,8 +424,39 @@ export default function ProjectPlotsPage({ params }) {
                   paginatedPlots.map(plot => (
                     <tr key={plot.id} className="hover:bg-zinc-800/20 transition-colors">
                       <td className="px-6 py-4 font-medium text-zinc-200">{plot.plotNumber}</td>
-                      <td className="px-6 py-4 text-zinc-400">{plot.width || '-'}</td>
-                      <td className="px-6 py-4 text-zinc-400">{plot.height || '-'}</td>
+                      <td className="px-6 py-4 text-zinc-400">{PLOT_TYPE_CONFIG[plot.plotType]?.displayName || plot.plotType}</td>
+                      <td className="px-6 py-4 text-zinc-400">
+                        {plot.dimensions?.length > 0 
+                          ? (
+                              <table className="text-xs">
+                                <tbody>
+                                  {plot.dimensions.map((d, i) => {
+                                    const config = PLOT_TYPE_CONFIG[plot.plotType];
+                                    const isMissing = d.value === null || d.value === undefined || d.value === '';
+                                    const val = isMissing ? '—' : Number(d.value).toFixed(2);
+                                    const unit = isMissing ? '' : (d.unit || 'm');
+                                    
+                                    if (config?.hideLabels) {
+                                      return (
+                                        <tr key={i}>
+                                          <td className="text-zinc-200 font-medium py-0.5">{val} {unit}</td>
+                                        </tr>
+                                      );
+                                    }
+                                    
+                                    return (
+                                      <tr key={i}>
+                                        <td className="text-zinc-500 pr-2 py-0.5 whitespace-nowrap text-right">{d.label}</td>
+                                        <td className="text-zinc-600 pr-2 py-0.5">:</td>
+                                        <td className="text-zinc-200 font-medium py-0.5 whitespace-nowrap">{val} {unit}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )
+                          : '-'}
+                      </td>
                       <td className="px-6 py-4 text-zinc-400">{plot.areaSqFt || '-'}</td>
                       <td className="px-6 py-4">
                         {plot.status ? (
@@ -276,11 +474,14 @@ export default function ProjectPlotsPage({ params }) {
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        {plot.cadRegionId ? (
-                           <span className="text-blue-400 font-medium text-xs">🔵 Assigned</span>
-                        ) : (
-                           <span className="text-green-400 font-medium text-xs">🟢 Available</span>
-                        )}
+                        <select
+                          value={plot.cadRegionId ? 'assigned' : 'available'}
+                          onChange={(e) => handleAssignmentChange(plot, e.target.value)}
+                          className="bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs font-medium focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        >
+                          <option value="available" className="text-green-400">🟢 Available</option>
+                          <option value="assigned" className="text-blue-400">🔵 Assigned</option>
+                        </select>
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
@@ -364,14 +565,61 @@ export default function ProjectPlotsPage({ params }) {
                         <input required type="text" value={formData.plotNumber} onChange={e => updateField('plotNumber', e.target.value)} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-md text-sm focus:outline-none focus:border-indigo-500 transition-colors" placeholder="e.g. A-101" />
                       </div>
                       
-                      <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-1.5">Width</label>
-                        <input type="number" step="0.01" value={formData.width} onChange={e => updateField('width', e.target.value)} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-md text-sm focus:outline-none focus:border-indigo-500 transition-colors" placeholder="0.00" />
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-zinc-400 mb-1.5">Plot Type *</label>
+                        <select 
+                          value={formData.plotType} 
+                          onChange={(e) => {
+                            const newType = e.target.value;
+                            const config = PLOT_TYPE_CONFIG[newType];
+                            const newList = [...formList];
+                            newList[index] = { 
+                              ...newList[index], 
+                              plotType: newType,
+                              dimensions: config ? config.dimensions.map(d => ({ ...d, value: '' })) : []
+                            };
+                            setFormList(newList);
+                          }}
+                          className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-md text-sm focus:outline-none focus:border-indigo-500 transition-colors appearance-none cursor-pointer"
+                        >
+                          {Object.entries(PLOT_TYPE_CONFIG).map(([key, config]) => (
+                            <option key={key} value={key}>{config.displayName}</option>
+                          ))}
+                        </select>
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-zinc-400 mb-1.5">Height / Depth</label>
-                        <input type="number" step="0.01" value={formData.height} onChange={e => updateField('height', e.target.value)} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-md text-sm focus:outline-none focus:border-indigo-500 transition-colors" placeholder="0.00" />
+                      <div className="col-span-2 space-y-3">
+                        <label className="block text-sm font-medium text-zinc-400">Dimensions</label>
+                        <div className="flex flex-col gap-3 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                          {formData.dimensions.map((dim, dIdx) => (
+                            <DimensionRow 
+                              key={dim.id || dIdx} // Use a stable key if available, else index
+                              dim={dim}
+                              dIdx={dIdx}
+                              plotType={formData.plotType}
+                              dimensions={formData.dimensions}
+                              updateDimensions={(newDims) => updateField('dimensions', newDims)}
+                              onRemove={() => {
+                                const newDims = [...formData.dimensions];
+                                newDims.splice(dIdx, 1);
+                                updateField('dimensions', newDims);
+                              }}
+                            />
+                          ))}
+                        </div>
+                        {PLOT_TYPE_CONFIG[formData.plotType]?.isDynamic && (
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              const newId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+                              const newDims = [...formData.dimensions, { id: newId, label: `Side ${formData.dimensions.length + 1}`, value: '', unit: 'm' }];
+                              updateField('dimensions', newDims);
+                            }}
+                            className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+                          >
+                            + Add Dimension
+                          </button>
+                        )}
                       </div>
 
                       <div>

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getCadProject, getCadConversions, deleteCadConversion, renameCadConversion } from '@/lib/api';
+import Swal from 'sweetalert2';
 
 export default function CadProjectDashboard({ projectId }) {
   const [project, setProject] = useState(null);
@@ -44,14 +45,15 @@ export default function CadProjectDashboard({ projectId }) {
         method: 'POST',
         body: formData,
       });
+      const data = await res.json();
       if (res.ok) {
         fetchData();
       } else {
-        alert('Upload failed');
+        Swal.fire({ icon: 'error', title: 'Upload Failed', text: data.error || 'Unknown error', background: '#18181b', color: '#fff' });
       }
     } catch (err) {
       console.error(err);
-      alert('Upload error');
+      Swal.fire({ icon: 'error', title: 'Upload Error', text: err.message, background: '#18181b', color: '#fff' });
     } finally {
       setIsUploading(false);
       e.target.value = '';
@@ -59,25 +61,58 @@ export default function CadProjectDashboard({ projectId }) {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this drawing?')) return;
-    try {
-      await deleteCadConversion(id);
-      fetchData();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to delete');
+    const result = await Swal.fire({
+      title: 'Delete Project?',
+      text: 'Are you sure you want to delete this project? This action cannot be undone.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, Delete',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await deleteCadConversion(id);
+        fetchData();
+        Swal.fire({
+          title: 'Deleted!',
+          text: 'Project has been deleted successfully.',
+          icon: 'success',
+          timer: 1500,
+          showConfirmButton: false
+        });
+      } catch (err) {
+        console.error(err);
+        Swal.fire({
+          title: 'Error',
+          text: 'Failed to delete the project. Please try again.',
+          icon: 'error'
+        });
+      }
     }
   };
 
   const handleRename = async (id, currentName) => {
-    const newName = prompt('Enter new name for drawing:', currentName);
+    const { value: newName } = await Swal.fire({
+      title: 'Rename Drawing',
+      input: 'text',
+      inputLabel: 'Enter new name for drawing',
+      inputValue: currentName,
+      showCancelButton: true,
+      background: '#18181b',
+      color: '#fff'
+    });
+
     if (!newName || newName === currentName) return;
     try {
       await renameCadConversion(id, newName);
       fetchData();
     } catch (err) {
       console.error(err);
-      alert('Failed to rename');
+      Swal.fire({ icon: 'error', title: 'Rename Failed', text: err.message, background: '#18181b', color: '#fff' });
     }
   };
 

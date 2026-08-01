@@ -2,6 +2,7 @@ export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:500
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
+    cache: 'no-store',
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -10,14 +11,17 @@ async function request(path, options = {}) {
   });
 
   if (!res.ok) {
+    let body;
     let message = `Request failed: ${res.status}`;
     try {
-      const body = await res.json();
+      body = await res.json();
       message = body?.message || message;
     } catch {
       // ignore JSON parse errors
     }
-    throw new Error(message);
+    const err = new Error(message);
+    err.response = body;
+    throw err;
   }
 
   return res.json();
@@ -27,6 +31,10 @@ async function request(path, options = {}) {
 
 export async function getCadProjects() {
   return request('/cad-projects');
+}
+
+export async function getPublicProjects() {
+  return request('/cad-projects/public');
 }
 
 export async function getCadProject(id) {
@@ -90,10 +98,24 @@ export async function createProjectPlot(projectId, body) {
   });
 }
 
+export async function createProjectPlotsBulk(projectId, body) {
+  return request(`/api/projects/${projectId}/plots/bulk`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function updateProjectPlot(projectId, plotId, body) {
   return request(`/api/projects/${projectId}/plots/${plotId}`, {
     method: 'PATCH',
     body: JSON.stringify(body),
+  });
+}
+
+export async function updateProjectPlotAssignment(projectId, plotId, assignmentData) {
+  return request(`/api/projects/${projectId}/plots/${plotId}/assignment`, {
+    method: 'PATCH',
+    body: JSON.stringify(assignmentData),
   });
 }
 

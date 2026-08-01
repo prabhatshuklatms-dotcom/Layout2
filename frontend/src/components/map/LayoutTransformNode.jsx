@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import L from 'leaflet';
 import { BASE_URL } from '@/lib/api';
+import PlotLabelsOverlay from '../cad-conversion/PlotLabelsOverlay';
+import { resolvePlotFill } from '../cad-conversion/editor/ShapeRenderer';
 
 export default function LayoutTransformNode({ 
   layout, 
@@ -9,27 +11,61 @@ export default function LayoutTransformNode({
   isSelected,
   onSelect,
   onTransformChange,
-  onTransformEnd
+  onTransformEnd,
+  plots,
+  statuses,
+  showPlotStatus
 }) {
   const [imgSize, setImgSize] = useState(null);
   const [svgUrl, setSvgUrl] = useState(null);
+  const [svgRaw, setSvgRaw] = useState(null);
   const [interactionPolygon, setInteractionPolygon] = useState(null);
 
   // Portal into Leaflet custom layer
   const [portalNode, setPortalNode] = useState(null);
   const layerRef = useRef(null);
+  const svgContainerRef = useRef(null);
+  
+  // Dynamic fill syncing
+  useEffect(() => {
+    if (!svgContainerRef.current) return;
+    const svgEl = svgContainerRef.current.querySelector('svg');
+    if (!svgEl) return;
+    
+    const plotNodes = svgEl.querySelectorAll('[data-plot-id]');
+    plotNodes.forEach(node => {
+      // Reconstruct shape context for the resolver
+      const shape = {
+        attributes: {
+          'data-plot-id': node.getAttribute('data-plot-id'),
+          'data-cad-custom-fill': node.getAttribute('data-cad-custom-fill'),
+          'data-original-fill': node.getAttribute('data-original-fill'),
+          'fill': node.getAttribute('fill')
+        }
+      };
+      
+      const resolvedFill = resolvePlotFill(shape, plots, statuses, showPlotStatus);
+      if (resolvedFill !== null) {
+        node.setAttribute('fill', resolvedFill);
+      } else {
+        node.removeAttribute('fill');
+      }
+    });
+  }, [showPlotStatus, plots, statuses, svgRaw]);
   
   // Mutable interaction state
   const stateRef = useRef({
     lat: layout.mapLatitude,
     lng: layout.mapLongitude,
     scale: layout.mapScale || 1,
-    rot: layout.mapRotation || 0
+    rot: layout.mapRotation || 0,
+    hasAutoFit: false
   });
 
   // Sync props to stateRef when updated externally
   useEffect(() => {
     stateRef.current = {
+      ...stateRef.current,
       lat: layout.mapLatitude,
       lng: layout.mapLongitude,
       scale: layout.mapScale || 1,
@@ -43,10 +79,23 @@ export default function LayoutTransformNode({
     fetch(url)
       .then(r => r.json())
       .then(data => {
-        const blob = new Blob([data.svg], { type: 'image/svg+xml' });
+        const svgStr = data.svg;
+
+        const blob = new Blob([svgStr], { type: 'image/svg+xml' });
         setSvgUrl(URL.createObjectURL(blob));
+        // Ensure SVG scales to container
+        let cleanSvgStr = svgStr;
+        if (!cleanSvgStr.includes('width=')) {
+          cleanSvgStr = cleanSvgStr.replace('<svg', '<svg width="100%" height="100%"');
+        } else {
+          cleanSvgStr = cleanSvgStr.replace(/width="[^"]+"/, 'width="100%"').replace(/height="[^"]+"/, 'height="100%"');
+        }
+        setSvgRaw(cleanSvgStr);
         if (data.interactionPolygon) {
           setInteractionPolygon(data.interactionPolygon);
+          if (data.interactionPolygon.viewBox) {
+            setImgSize({ w: data.interactionPolygon.viewBox.width, h: data.interactionPolygon.viewBox.height });
+          }
         } else if (data.geometry) {
           const g = data.geometry;
           setInteractionPolygon({
@@ -77,6 +126,7 @@ export default function LayoutTransformNode({
         this._map = m;
         this._container = L.DomUtil.create('div', 'leaflet-zoom-animated cad-transform-node group');
         this._container.style.position = 'absolute';
+        this._container.style.zIndex = '500'; // Ensure it renders above boundary polygons
         // We set the CSS transform-origin to the polygon centroid
         this._container.style.transformOrigin = `${centroidPx.x}px ${centroidPx.y}px`;
         
@@ -156,6 +206,38 @@ export default function LayoutTransformNode({
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, imgSize, interactionPolygon]);
+
+  // Auto-fit initial placement
+  useEffect(() => {
+    if (!map || !imgSize || !interactionPolygon) return;
+    
+    // Check if this is an initial placement (scale is exactly 1)
+    if (layout.mapScale === 1 && !stateRef.current.hasAutoFit) {
+      stateRef.current.hasAutoFit = true;
+      
+      const mapBounds = map.getBounds();
+      const nw = map.latLngToLayerPoint(mapBounds.getNorthWest());
+      const se = map.latLngToLayerPoint(mapBounds.getSouthEast());
+      const mapWidthPx = Math.abs(se.x - nw.x);
+      const mapHeightPx = Math.abs(se.y - nw.y);
+      
+      // Target 40% of the visible map width
+      const targetWidth = mapWidthPx * 0.4;
+      const targetHeight = mapHeightPx * 0.4;
+      
+      const scaleX = targetWidth / imgSize.w;
+      const scaleY = targetHeight / imgSize.h;
+      const requiredZoomScale = Math.min(scaleX, scaleY);
+      
+      const zoomScale = Math.pow(2, map.getZoom() - 17);
+      let baseScale = requiredZoomScale / zoomScale;
+      
+      if (baseScale && isFinite(baseScale)) {
+        if (baseScale < 0.001) baseScale = 0.001; // Safety
+        onTransformChange({ mapScale: baseScale });
+      }
+    }
+  }, [map, imgSize, interactionPolygon, layout.mapScale]);
 
   // Math Helper
   const rotatePoint = (pt, angleDeg) => {
@@ -295,7 +377,11 @@ export default function LayoutTransformNode({
       <div style={{ opacity: 0, position: 'absolute', pointerEvents: 'none' }}>
         {svgUrl && <img 
           src={svgUrl} 
-          onLoad={(e) => setImgSize({ w: e.target.naturalWidth, h: e.target.naturalHeight })}
+          onLoad={(e) => {
+            if (!imgSize) {
+              setImgSize({ w: e.target.naturalWidth, h: e.target.naturalHeight });
+            }
+          }}
           alt="layout preview"
         />}
       </div>
@@ -320,13 +406,24 @@ export default function LayoutTransformNode({
     edges.push({ p1, p2, mx, my });
   }
 
-  // 3. Find Top-most Edge (minimum Y at midpoint)
+  // 3. Find Top-most Edge (minimum screen-space Y at midpoint)
+  const activeRot = layout.mapRotation || 0;
+  const theta = (activeRot * Math.PI) / 180;
+  
   let topEdge = edges[0];
+  let minScreenY = Infinity;
   for (const edge of edges) {
-    if (edge.my < topEdge.my) topEdge = edge;
+    const dx = edge.mx - centroidPx.x;
+    const dy = edge.my - centroidPx.y;
+    // Rotate relative to centroid to find physical Y
+    const screenY = centroidPx.y + dx * Math.sin(theta) + dy * Math.cos(theta);
+    if (screenY < minScreenY) {
+      minScreenY = screenY;
+      topEdge = edge;
+    }
   }
 
-  // 4. Calculate Outward Normal for Rotation Handle
+  // 4. Calculate Outward Normal for Rotation Handle in LOCAL space
   const dx = topEdge.p2.x - topEdge.p1.x;
   const dy = topEdge.p2.y - topEdge.p1.y;
   let nx = -dy; // perpendicular
@@ -342,18 +439,18 @@ export default function LayoutTransformNode({
     nx = -nx; ny = -ny; // Flip to point outward
   }
 
-  // Position rotation handle 40px outward
-  const rotHandlePx = { x: topEdge.mx + nx * 40, y: topEdge.my + ny * 40 };
+  // Calculate the angle of the normal in degrees for the CSS transform
+  const normalAngleDeg = Math.atan2(ny, nx) * 180 / Math.PI;
 
   const content = (
     <div style={{ width: `${imgSize.w}px`, height: `${imgSize.h}px`, pointerEvents: 'none', userSelect: 'none' }}>
-      <img 
-        src={svgUrl} 
-        style={{ width: '100%', height: '100%', opacity: 0.85, pointerEvents: 'none' }} 
-        draggable="false"
-        alt="cad layout"
+      <div 
+        ref={svgContainerRef}
+        dangerouslySetInnerHTML={{ __html: svgRaw }}
+        style={{ width: '100%', height: '100%', opacity: 0.85, pointerEvents: 'none', position: 'absolute', top: 0, left: 0 }} 
       />
       <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
+        <PlotLabelsOverlay svgRef={svgContainerRef} plots={plots} />
         <polygon 
           points={polygonPoints} 
           fill="transparent" 
@@ -364,15 +461,6 @@ export default function LayoutTransformNode({
           onClick={(e) => { e.stopPropagation(); if (!isSelected && onSelect) onSelect(); }}
           onPointerDown={(e) => handlePointerDown(e, 'move', null)}
         />
-        {isSelected && (
-          <line 
-            x1={topEdge.mx} y1={topEdge.my} 
-            x2={`calc(${topEdge.mx}px + ${nx} * 40px / var(--combined-scale))`} 
-            y2={`calc(${topEdge.my}px + ${ny} * 40px / var(--combined-scale))`} 
-            stroke="#3b82f6" strokeWidth="calc(1.5 / var(--combined-scale))" 
-            pointerEvents="none"
-          />
-        )}
       </svg>
       {isSelected && (
         <>
@@ -383,18 +471,43 @@ export default function LayoutTransformNode({
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-0.5 bg-[#3b82f6]"></div>
           </div>
           
-          {/* Rotation Handle */}
+          {/* Rotation Handle Assembly */}
           <div 
-            className="absolute w-4 h-4 bg-white border-2 border-[#3b82f6] rounded-full cursor-crosshair hover:scale-125 transition-transform shadow-md"
-            style={{ 
-              left: `calc(${topEdge.mx}px + ${nx} * 40px / var(--combined-scale))`, 
-              top: `calc(${topEdge.my}px + ${ny} * 40px / var(--combined-scale))`, 
-              transform: `translate(-50%, -50%) scale(calc(1 / var(--combined-scale)))`, 
-              transformOrigin: 'center', pointerEvents: 'auto' 
+            className="absolute pointer-events-none"
+            style={{
+              left: `${topEdge.mx}px`,
+              top: `${topEdge.my}px`,
+              width: 0,
+              height: 0,
+              // Rotate to normal, then invert the parent scale so 1px = 1 screen px
+              transform: `rotate(${normalAngleDeg}deg) scale(calc(1 / var(--combined-scale)))`,
             }}
-            onPointerDown={(e) => handlePointerDown(e, 'rotate', null)}
-            title="Rotate"
-          ></div>
+          >
+            {/* The Connector Line */}
+            <div 
+              className="absolute top-0 left-0 bg-[#3b82f6]"
+              style={{
+                width: '40px',
+                height: '1.5px',
+                transform: 'translateY(-50%)'
+              }}
+            />
+            
+            {/* The Handle */}
+            <div 
+              className="absolute bg-white border-2 border-[#3b82f6] rounded-full cursor-crosshair hover:scale-125 transition-transform shadow-md"
+              style={{ 
+                left: '40px',
+                top: 0,
+                width: '16px',
+                height: '16px',
+                transform: `translate(-50%, -50%)`, 
+                pointerEvents: 'auto' 
+              }}
+              onPointerDown={(e) => handlePointerDown(e, 'rotate', null)}
+              title="Rotate"
+            ></div>
+          </div>
 
           {/* Vertex Handles */}
           {verticesPx.map((v, idx) => (

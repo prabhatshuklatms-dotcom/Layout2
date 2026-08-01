@@ -1,13 +1,73 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateProjectPlotDto } from './dto/create-project-plot.dto';
+import { UpdateProjectPlotDto } from './dto/update-project-plot.dto';
 
 @Injectable()
 export class ProjectPlotService {
+  private readonly logger = new Logger(ProjectPlotService.name);
+
   constructor(private prisma: PrismaService) {}
 
-  create(createProjectPlotDto: any) {
+  async createBulk(projectId: number, createProjectPlotsDto: CreateProjectPlotDto[]) {
+    this.logger.log(`[createBulk] Starting validation for ${createProjectPlotsDto.length} plots in project ${projectId}`);
+    
+    // 1. Validation Phase
+    const plotNumbers = createProjectPlotsDto.map(p => p.plotNumber).filter(Boolean);
+    const existingPlots = await this.prisma.projectPlot.findMany({
+      where: {
+        projectId,
+        plotNumber: { in: plotNumbers }
+      }
+    });
+
+    if (existingPlots.length > 0) {
+      const failedPlots = existingPlots.map(ep => ({
+        plotNumber: ep.plotNumber,
+        reason: 'Plot number already exists in this project'
+      }));
+      this.logger.warn(`[createBulk] Validation failed: Found ${failedPlots.length} duplicate plots`);
+      throw new BadRequestException({
+        success: false,
+        message: 'Validation failed for one or more plots.',
+        reason: 'Duplicate plot numbers found.',
+        failedPlots
+      });
+    }
+
+    // 2. Transaction Phase
+    this.logger.log(`[createBulk] Validation passed. Beginning transaction...`);
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const payload = createProjectPlotsDto.map(dto => ({
+          ...dto,
+          projectId,
+        }));
+        
+        const created = await tx.projectPlot.createMany({
+          data: payload as any,
+        });
+        this.logger.log(`[createBulk] Transaction Commit: Successfully inserted ${created.count} plots.`);
+        return created;
+      });
+      return { success: true, count: result.count };
+    } catch (error) {
+      this.logger.error(`[createBulk] Transaction Rollback due to error: ${error.message}`, error.stack);
+      throw new BadRequestException({
+        success: false,
+        message: 'Failed to create bulk plots',
+        reason: error.message || 'Unknown database error',
+        failedPlots: []
+      });
+    }
+  }
+
+  create(projectId: number, createProjectPlotDto: CreateProjectPlotDto) {
     return this.prisma.projectPlot.create({
-      data: createProjectPlotDto,
+      data: {
+        ...createProjectPlotDto,
+        projectId,
+      } as any,
       include: { status: true },
     });
   }
@@ -29,10 +89,44 @@ export class ProjectPlotService {
     return plot;
   }
 
-  update(id: number, updateProjectPlotDto: any) {
+  updateAssignment(id: number, payload: any) {
+    let dataToUpdate: any = {};
+    if (payload.cadRegionId === null) {
+      // Wiping assignment: clear all placement fields
+      dataToUpdate = {
+        cadRegionId: null,
+        conversionId: null,
+        cadObjectType: null,
+        x: null,
+        y: null,
+        rotation: null,
+        scale: null,
+        metadata: null,
+      };
+    } else {
+      // Assigning: update fields
+      dataToUpdate = {
+        cadRegionId: payload.cadRegionId,
+        conversionId: payload.conversionId,
+        cadObjectType: payload.cadObjectType,
+        x: payload.x,
+        y: payload.y,
+        rotation: payload.rotation,
+        scale: payload.scale,
+        metadata: payload.metadata,
+      };
+    }
     return this.prisma.projectPlot.update({
       where: { id },
-      data: updateProjectPlotDto,
+      data: dataToUpdate,
+      include: { status: true },
+    });
+  }
+
+  update(id: number, updateProjectPlotDto: UpdateProjectPlotDto) {
+    return this.prisma.projectPlot.update({
+      where: { id },
+      data: updateProjectPlotDto as any,
       include: { status: true },
     });
   }

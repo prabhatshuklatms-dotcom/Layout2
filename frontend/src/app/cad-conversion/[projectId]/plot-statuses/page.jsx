@@ -4,6 +4,7 @@ import { getProjectPlotStatuses, createProjectPlotStatus, updateProjectPlotStatu
 import { Plus, Edit2, Trash2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Swal from 'sweetalert2';
 
 export default function ProjectPlotStatusesPage({ params }) {
   const unwrappedParams = use(params);
@@ -82,12 +83,25 @@ export default function ProjectPlotStatusesPage({ params }) {
   };
 
   const handleDelete = async (id, name) => {
-    if (confirm(`Are you sure you want to delete status "${name}"?`)) {
+    const result = await Swal.fire({
+      title: 'Delete Plot Status?',
+      text: `Are you sure you want to delete status "${name}"? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#3f3f46',
+      confirmButtonText: 'Yes, Delete',
+      background: '#18181b',
+      color: '#fff'
+    });
+
+    if (result.isConfirmed) {
       try {
         await deleteProjectPlotStatus(projectId, id);
+        Swal.fire({ title: 'Deleted!', text: 'Plot status has been deleted.', icon: 'success', background: '#18181b', color: '#fff' });
         fetchData();
       } catch (err) {
-        alert(err.message || 'Failed to delete plot status');
+        Swal.fire({ title: 'Error', text: err.message || 'Failed to delete plot status', icon: 'error', background: '#18181b', color: '#fff' });
       }
     }
   };

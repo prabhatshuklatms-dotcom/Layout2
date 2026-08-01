@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getCadProjects, createCadProject } from '@/lib/api';
+import Swal from 'sweetalert2';
 
 export default function CadProjectList() {
   const [projects, setProjects] = useState([]);
@@ -35,7 +36,7 @@ export default function CadProjectList() {
       router.push(`/cad-conversion/${project.id}`);
     } catch (err) {
       console.error(err);
-      alert('Failed to create project. ' + err.message);
+      Swal.fire({ icon: 'error', title: 'Failed to create project', text: err.message, background: '#18181b', color: '#fff' });
     }
   };
 

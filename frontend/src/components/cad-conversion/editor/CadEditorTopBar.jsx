@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Undo2, Redo2, Maximize } from 'lucide-react';
+import { ChevronLeft, Undo2, Redo2, Maximize, RefreshCw } from 'lucide-react';
 
 export default function CadEditorTopBar({ 
   zoomPercent, 
@@ -15,7 +15,9 @@ export default function CadEditorTopBar({
   canRedo,
   activeTool,
   strokeWidth,
-  onStrokeWidthChange
+  onStrokeWidthChange,
+  showPlotStatus,
+  onTogglePlotStatus
 }) {
   const isDrawingTool = activeTool === 'draw_line' || activeTool === 'draw_circle' || activeTool === 'draw_curve' || activeTool === 'draw_polygon' || activeTool === 'draw_text' || activeTool === 'draw_arrow';
   const backUrl = projectId ? `/cad-conversion/${projectId}` : '/cad-conversion';
@@ -65,6 +67,16 @@ export default function CadEditorTopBar({
       </div>
 
       <div className="flex items-center gap-6">
+        <div className="flex items-center gap-2 mr-2">
+          <span className="text-xs text-zinc-400 font-medium">Show Plot Status</span>
+          <button 
+            onClick={onTogglePlotStatus}
+            className={`w-8 h-4 rounded-full relative transition-colors ${showPlotStatus ? 'bg-indigo-500' : 'bg-zinc-700'}`}
+          >
+            <div className={`w-3 h-3 bg-white rounded-full absolute top-0.5 transition-all ${showPlotStatus ? 'left-[18px]' : 'left-0.5'}`} />
+          </button>
+        </div>
+
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 border border-zinc-800 bg-zinc-900 rounded p-1">
             <button 
@@ -85,6 +97,14 @@ export default function CadEditorTopBar({
             </button>
           </div>
           
+          <button
+            onClick={() => window.location.reload()}
+            className="flex items-center justify-center min-w-[32px] h-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded transition-colors"
+            title="Refresh Page"
+          >
+            <RefreshCw size={14} />
+          </button>
+
           <button
             onClick={onSave}
             disabled={isSaving}

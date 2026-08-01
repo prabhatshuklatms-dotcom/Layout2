@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { CheckCircle2, Clock, XCircle, Loader2, Edit2, Trash2, Check, X, UploadCloud } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import Swal from 'sweetalert2';
 
 export default function ConversionQueue({ conversions, selectedId, onSelect, onDelete, onUpdate, onReupload }) {
   const [editingId, setEditingId] = useState(null);
@@ -38,9 +39,20 @@ export default function ConversionQueue({ conversions, selectedId, onSelect, onD
 
   const handleDelete = (e, id) => {
     e.stopPropagation();
-    if (confirm('Are you sure you want to delete this conversion?')) {
-      onDelete(id);
-    }
+    Swal.fire({
+      title: 'Delete Conversion?',
+      text: 'Are you sure you want to delete this conversion?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete',
+      confirmButtonColor: '#ef4444',
+      background: '#18181b',
+      color: '#fff'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        onDelete(id);
+      }
+    });
   };
 
   const handleReuploadClick = (e, id) => {

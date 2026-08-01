@@ -278,7 +278,10 @@ export class PlotDetectionService {
    */
   public detect(svgString: string): PlotDetectionResult {
     // ── Quick check: already normalized? ─────────────────────────────────
-    if (svgString.includes('data-closed="true"')) {
+    const hasPlotDetection = svgString.includes('data-closed="true"');
+    const hasCoordNormalization = svgString.includes('viewBox="0 0 ');
+
+    if (hasPlotDetection && hasCoordNormalization) {
       const existingCount = (svgString.match(/data-closed="true"/g) || []).length;
       return { svg: svgString, detectedCount: existingCount, wasAlreadyNormalized: true };
     }
@@ -291,12 +294,92 @@ export class PlotDetectionService {
       return { svg: svgString, detectedCount: 0, wasAlreadyNormalized: false };
     }
 
+    // ── Coordinate Normalization ─────────────────────────────────────────
+    if (!hasCoordNormalization) {
+      const vbAttr = svgEl.getAttribute('viewBox');
+      if (vbAttr) {
+        const parts = vbAttr.trim().split(/[\s,]+/).map(Number);
+        if (parts.length === 4 && parts.every(n => !isNaN(n))) {
+          const [minX, minY, width, height] = parts;
+
+          if (Math.abs(minX) > 0.1 || Math.abs(minY) > 0.1) {
+            const offsetX = -minX;
+            const offsetY = -minY;
+
+            const shiftCoords = (el: Element) => {
+              const tag = el.tagName.toLowerCase();
+
+              const shiftAttr = (name: string, isX: boolean) => {
+                const val = el.getAttribute(name);
+                if (val) {
+                  el.setAttribute(name, String(parseFloat(val) + (isX ? offsetX : offsetY)));
+                }
+              };
+
+              shiftAttr('x', true);
+              shiftAttr('x1', true);
+              shiftAttr('x2', true);
+              shiftAttr('cx', true);
+
+              shiftAttr('y', false);
+              shiftAttr('y1', false);
+              shiftAttr('y2', false);
+              shiftAttr('cy', false);
+
+              if (tag === 'path') {
+                let d = el.getAttribute('d');
+                if (d) {
+                  d = d.replace(/([MLT])\s*([-\d.]+)[,\s]+([-\d.]+)/gi, (match, cmd, px, py) => {
+                    return `${cmd} ${parseFloat(px) + offsetX} ${parseFloat(py) + offsetY}`;
+                  });
+                  d = d.replace(/([A])\s*([-\d.]+)[,\s]+([-\d.]+)[,\s]+([-\d.]+)[,\s]+([01])[,\s]+([01])[,\s]+([-\d.]+)[,\s]+([-\d.]+)/gi, (match, cmd, rx, ry, rot, la, sw, px, py) => {
+                    return `${cmd} ${rx} ${ry} ${rot} ${la} ${sw} ${parseFloat(px) + offsetX} ${parseFloat(py) + offsetY}`;
+                  });
+                  el.setAttribute('d', d);
+                }
+              }
+
+              if (tag === 'polygon' || tag === 'polyline') {
+                const ptsStr = el.getAttribute('points');
+                if (ptsStr) {
+                  const nums = ptsStr.trim().split(/[\s,]+/).map(Number);
+                  const shifted: number[] = [];
+                  for (let i = 0; i + 1 < nums.length; i += 2) {
+                    shifted.push(nums[i] + offsetX, nums[i + 1] + offsetY);
+                  }
+                  el.setAttribute('points', shifted.join(' '));
+                }
+              }
+
+              let transform = el.getAttribute('transform');
+              if (transform) {
+                transform = transform.replace(/rotate\(([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\)/gi, (match, angle, cx, cy) => {
+                  return `rotate(${angle} ${parseFloat(cx) + offsetX} ${parseFloat(cy) + offsetY})`;
+                });
+                transform = transform.replace(/translate\(([-\d.]+)[,\s]+([-\d.]+)\)/gi, (match, tx, ty) => {
+                  return `translate(${parseFloat(tx) + offsetX}, ${parseFloat(ty) + offsetY})`;
+                });
+                el.setAttribute('transform', transform);
+              }
+
+              for (let i = 0; i < el.children.length; i++) {
+                shiftCoords(el.children[i]);
+              }
+            };
+
+            shiftCoords(svgEl);
+            svgEl.setAttribute('viewBox', `0 0 ${width} ${height}`);
+          }
+        }
+      }
+    }
+
     // Collect every geometric element, including those in nested <g>s.
     // Skip elements inside <defs> — those are block symbol definitions, not plot regions.
     const defsEl = svgEl.querySelector('defs');
     const elements = collectGeometricElements(svgEl).filter(el => {
       if (defsEl && defsEl.contains(el)) return false;  // skip block defs
-      
+
       // Legacy bug: older pipeline versions stamped data-cad-type="background" on
       // ALL geometric entities, not just text. For geometric tags, IGNORE the
       // background attribute and evaluate closure normally. For text elements,
@@ -304,10 +387,10 @@ export class PlotDetectionService {
       const cadType = el.getAttribute('data-cad-type');
       const tag = el.tagName.toLowerCase();
       const isTextElement = tag === 'text' || tag === 'tspan';
-      
+
       if (cadType === 'background' && isTextElement) return false;
       // For non-text geometry, background is meaningless — ignore it
-      
+
       if (cadType === 'hatch') return false;
       if (el.getAttribute('pointer-events') === 'none') return false;
       return true;
