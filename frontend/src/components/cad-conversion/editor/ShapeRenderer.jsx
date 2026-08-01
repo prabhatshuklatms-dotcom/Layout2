@@ -29,7 +29,7 @@ export function resolvePlotFill(shape, plots, statuses, showPlotStatus) {
   return attrs.fill || null;
 }
 
-const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onPointerDown, plots, statuses, showPlotStatus, readOnly, cadLineColor }) {
+const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onPointerDown, plots, statuses, showPlotStatus, readOnly }) {
   if (!shape) return null;
   if (shape.id === 'composite-plot-labels' || shape.id === 'composite-amenities') return null;
 
@@ -47,7 +47,6 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
       statuses={statuses}
       showPlotStatus={showPlotStatus}
       readOnly={readOnly}
-      cadLineColor={cadLineColor}
     />
   ));
 
@@ -93,18 +92,7 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
     reactAttrs.vectorEffect = 'non-scaling-stroke'; // Keep the border consistent regardless of zoom
   }
 
-      // Apply CAD Line Color
-  if (!isSelected && cadLineColor && cadLineColor !== '#FFFFFF') {
-    const isGeometric = ['path', 'polygon', 'rect', 'circle', 'ellipse', 'line', 'polyline'].includes(Tag);
-    const isDimension = shape.id && String(shape.id).includes('dim');
-    const isLabel = shape.id && String(shape.id).includes('label');
-    
-    if (isGeometric && !isDimension && !isLabel) {
-      if (reactAttrs.stroke && reactAttrs.stroke !== 'none') {
-        reactAttrs.stroke = cadLineColor;
-      }
-    }
-  }
+
 
   if (Tag === 'g' || Tag === 'defs' || Tag === 'clipPath' || Tag === 'pattern') {
     return (

@@ -5,6 +5,6 @@ export const metadata = {
 };
 
 export default async function CadProjectEditorPage({ params }) {
-  const { projectId, drawingId } = await params;
-  return <CadEditorWorkspace conversionId={drawingId} projectId={projectId} />;
+  const { projectId, editorId } = await params;
+  return <CadEditorWorkspace conversionId={editorId} projectId={projectId} />;
 }

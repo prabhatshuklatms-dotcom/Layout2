@@ -9,7 +9,7 @@ const STROKE_SUPPORTED_TYPES = new Set([
 const MIN_STROKE = 0.01;
 const MAX_STROKE = 20;
 
-export default function CadEditorSidebar({ projectId, conversion, coords, activeTool, selectedShapes, fillColor, fillOpacity, eraserSize, plots, statuses, masterAmenities = [], onFillColorChange, onFillOpacityChange, onStrokeWidthChange, onEraserSizeChange, onAssignPlot, onCadLineColorChange }) {
+export default function CadEditorSidebar({ projectId, conversion, coords, activeTool, selectedShapes, fillColor, fillOpacity, eraserSize, plots, statuses, masterAmenities = [], onFillColorChange, onFillOpacityChange, onStrokeWidthChange, onEraserSizeChange, onAssignPlot }) {
   const [localStroke, setLocalStroke] = useState(2);
   const [localEraser, setLocalEraser] = useState(1);
   
@@ -118,44 +118,6 @@ export default function CadEditorSidebar({ projectId, conversion, coords, active
         </div>
       </div>
 
-      {/* ── Appearance ──────────────────────────────────────────────────── */}
-      <div className="p-4 border-b border-zinc-800">
-        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Appearance</h3>
-        <div className="space-y-3">
-          <div>
-            <div className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">CAD Line Color</div>
-            <div className="flex items-center gap-2">
-              <label className="flex-1 flex justify-center py-1.5 px-3 bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 rounded cursor-pointer transition-colors border border-zinc-700">
-                Pick Color
-                <input 
-                  type="color" 
-                  className="sr-only" 
-                  value={conversion?.cadLineColor || '#FFFFFF'}
-                  onChange={(e) => {
-                    if (onCadLineColorChange) {
-                      onCadLineColorChange(e.target.value.toUpperCase());
-                    }
-                  }}
-                />
-              </label>
-              <button
-                onClick={() => {
-                  if (onCadLineColorChange) {
-                    onCadLineColorChange('#FFFFFF');
-                  }
-                }}
-                className="py-1.5 px-3 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded border border-zinc-700 transition-colors"
-                title="Reset to Default"
-              >
-                Reset
-              </button>
-            </div>
-            <div className="text-xs text-zinc-500 font-mono mt-2 truncate text-center">
-              Current: {conversion?.cadLineColor || '#FFFFFF'}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ── Properties ──────────────────────────────────────────────────── */}
       <div className="p-4 border-b border-zinc-800">
