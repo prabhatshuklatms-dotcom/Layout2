@@ -618,7 +618,8 @@ function MultiSelectOverlay({ selectedShapeIds, documentState, svgRef, scale }) 
   );
 }
 
-import PlotLabelsOverlay from '../../shared/appearance/PlotLabelsOverlay';
+import PlotLabelsOverlay from '../PlotLabelsOverlay';
+import CompassControl from './CompassControl';
 
 
 
@@ -634,19 +635,21 @@ export default function CadEditorCanvas({
   plots,
   statuses,
   showPlotStatus,
+  shapeAppearances,
+  setShapeAppearances,
   onZoomChange,
   onCoordsChange,
   onSvgModified,
   onToolChange,
-  projectId,
-  projectConfig,
   onSelectionChange,
   onLabelDragEnd,
   masterAmenities = [],
   placedAmenities = [],
   setPlacedAmenities,
   conversionId,
-  readOnly = false
+  projectId,
+  readOnly = false,
+  layoutLineColor
 }) {
   const containerRef = useRef(null);
   const contentRef = useRef(null);
@@ -657,7 +660,7 @@ export default function CadEditorCanvas({
   const internalUpdateRef = useRef(false);
 
   // Transformation state
-  const transform = useRef({ x: 0, y: 0, scale: 1 });
+  const transform = useRef({ x: 0, y: 0, scale: 1, rotation: 0 });
   const isDragging = useRef(false);
   const lastMouse = useRef({ x: 0, y: 0 });
   const reqFrame = useRef(null);
@@ -689,6 +692,31 @@ export default function CadEditorCanvas({
   const [veCursorCoords, setVeCursorCoords] = useState(null);
   const [veModified, setVeModified] = useState(false);
   const [pendingVeSave, setPendingVeSave] = useState(false);
+
+  // Status Reveal Animation Delay Map
+  const [plotDelays, setPlotDelays] = useState({});
+
+  useEffect(() => {
+    const svgEl = svgRef.current?.querySelector('svg');
+    if (!svgEl) return;
+    const plotNodes = Array.from(svgEl.querySelectorAll('[data-plot-id]'));
+    if (plotNodes.length === 0) return;
+
+    const sorted = plotNodes.map(node => {
+      let cx = 0;
+      try {
+        const bbox = node.getBBox();
+        cx = bbox.x + bbox.width / 2;
+      } catch (e) {}
+      return { id: node.id, cx };
+    }).sort((a, b) => b.cx - a.cx);
+
+    const delays = {};
+    sorted.forEach((item, index) => {
+      if (item.id) delays[item.id] = index * 15;
+    });
+    setPlotDelays(delays);
+  }, [documentState.shapes]);
 
   // Sync zoom/coords throttled
   const notifyChanges = () => {
@@ -763,7 +791,7 @@ export default function CadEditorCanvas({
 
   const applyTransform = () => {
     if (contentRef.current) {
-      contentRef.current.style.transform = `translate(${transform.current.x}px, ${transform.current.y}px) scale(${transform.current.scale})`;
+      contentRef.current.style.transform = `translate(${transform.current.x}px, ${transform.current.y}px) scale(${transform.current.scale}) rotate(${transform.current.rotation}deg)`;
     }
     notifyChanges();
   };
@@ -799,6 +827,12 @@ export default function CadEditorCanvas({
     transform.current.scale = 1;
     transform.current.x = 0;
     transform.current.y = 0;
+    transform.current.rotation = 0;
+    requestUpdate();
+  }, []);
+
+  const handleResetNorth = useCallback(() => {
+    transform.current.rotation = 0;
     requestUpdate();
   }, []);
 
@@ -898,71 +932,32 @@ export default function CadEditorCanvas({
     return () => window.removeEventListener('cad-patch-shape', handler);
   }, [onSvgModified]);
 
-  const executeBulkPaste = async (payload) => {
-    if (!payload) return;
-    const shapesToPaste = Array.isArray(payload) ? payload : (payload.shapes || []);
-    const amenitiesToPaste = !Array.isArray(payload) && payload.amenities ? payload.amenities : [];
-    
-    if (shapesToPaste.length === 0 && amenitiesToPaste.length === 0) return;
-
-    const newShapeIds = [];
-    const newPlacementIds = [];
-    let finalShapes = [...documentState.shapes];
-    let shapesChanged = false;
-
-    if (shapesToPaste.length > 0) {
-      const replaceIdsDeep = (shape) => {
-        shape.id = `cad-shape-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-        if (shape.children) {
-          shape.children.forEach(child => replaceIdsDeep(child));
-        }
-      };
-
-      for (const shapeObj of shapesToPaste) {
-        const cloned = JSON.parse(JSON.stringify(shapeObj));
-        const offsetShape = offsetShapeAttrs(cloned, 20, 20);
-        replaceIdsDeep(offsetShape);
-        finalShapes.push(offsetShape);
-        newShapeIds.push(offsetShape.id);
-      }
-      shapesChanged = true;
+  const deleteSelectedShape = () => {
+    if (selectedShapeIds.length === 0) return;
+    let newShapes = [...documentState.shapes];
+    for (const id of selectedShapeIds) {
+      newShapes = deleteShapeDeep(newShapes, id);
     }
+    setDocumentState({ ...documentState, shapes: newShapes });
+    setSelectedShapeIds([]);
+    if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
+  };
 
-    if (amenitiesToPaste.length > 0) {
-      const createdAmenities = [];
-      for (const amenity of amenitiesToPaste) {
-        try {
-          const newPlacement = await createAmenityPlacement({
-            amenityId: amenity.amenityId,
-            projectId: parseInt(projectId),
-            conversionId: parseInt(conversionId),
-            x: amenity.x + 20,
-            y: amenity.y + 20,
-            width: amenity.width,
-            height: amenity.height,
-            rotation: amenity.rotation || 0,
-            layerOrder: amenity.layerOrder || 0
-          });
-          createdAmenities.push(newPlacement);
-          newPlacementIds.push(newPlacement.id);
-        } catch (err) {
-          console.error('Failed to paste amenity:', err);
-        }
-      }
-      if (createdAmenities.length > 0) {
-        setPlacedAmenities(prev => [...prev, ...createdAmenities]);
-      }
-    }
+  const duplicateShape = (shapeObj) => {
+    if (!shapeObj) return;
+    const newId = `cad-shape-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const offsetShape = offsetShapeAttrs(JSON.parse(JSON.stringify(shapeObj)), 20, 20);
+    const newShape = { ...offsetShape, id: newId };
 
-    if (shapesChanged) {
-      setDocumentState(prev => ({ ...prev, shapes: finalShapes }));
-      if (onSvgModified) notifySvgModified(serializeStateToSvgString(finalShapes, documentState.viewBox));
-    }
+    setDocumentState(prev => {
+      const newShapes = [...prev.shapes, newShape];
+      if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, prev.viewBox));
+      return { ...prev, shapes: newShapes };
+    });
 
     setTimeout(() => {
       onToolChange?.('pointer');
-      setSelectedShapeIds(newShapeIds);
-      setSelectedPlacementIds(newPlacementIds);
+      setSelectedShapeIds([newId]);
     }, 50);
   };
 
@@ -1078,70 +1073,248 @@ export default function CadEditorCanvas({
         console.log('[PartialDelete] Deleted segments from', hitsByShape.size, 'shape(s)');
       }
 
-      if (activeTool === 'pointer') {
-        const hasShapes = selectedShapeIds.length > 0;
-        const hasAmenities = selectedPlacementIds.length > 0;
-
-        if (hasShapes || hasAmenities) {
-          const getClipboardPayload = () => {
-            const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)?.shape).filter(Boolean);
-            const amenitiesToCopy = placedAmenities.filter(p => selectedPlacementIds.includes(p.id));
-            return JSON.parse(JSON.stringify({ shapes: shapesToCopy, amenities: amenitiesToCopy }));
-          };
-
-          const executeDelete = () => {
-            let newShapes = [...documentState.shapes];
-            let shapesChanged = false;
-
-            if (hasShapes) {
-              for (const id of selectedShapeIds) {
-                newShapes = deleteShapeDeep(newShapes, id);
-              }
-              shapesChanged = true;
-            }
-
-            if (hasAmenities) {
-              for (const id of selectedPlacementIds) {
-                deleteAmenityPlacement(id).then(() => {
-                  setPlacedAmenities(prev => prev.filter(p => p.id !== id));
-                }).catch(console.error);
-              }
-            }
-
-            if (shapesChanged) {
-              setDocumentState({ ...documentState, shapes: newShapes });
-              if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
-            }
-            setSelectedShapeIds([]);
-            setSelectedPlacementIds([]);
-          };
-
-          if (e.key === 'Delete' || e.key === 'Backspace') {
-            e.preventDefault();
-            executeDelete();
+      if (activeTool === 'pointer' && selectedPlacementIds.length > 0) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          for (const id of selectedPlacementIds) {
+            deleteAmenityPlacement(id).then(() => {
+              // Note: Assuming setPlacedAmenities passed or handling is needed
+              // setPlacedAmenities(prev => prev.filter(p => p.id !== id));
+            }).catch(console.error);
           }
+          setSelectedPlacementIds([]);
+        }
+      }
 
-          if (e.ctrlKey || e.metaKey) {
-            if (e.key === 'c') {
-              e.preventDefault();
-              setClipboard(getClipboardPayload());
-            }
-            if (e.key === 'x') {
-              e.preventDefault();
-              setClipboard(getClipboardPayload());
-              executeDelete();
-            }
-            if (e.key === 'd') {
-              e.preventDefault();
-              executeBulkPaste(getClipboardPayload());
-            }
-            if (e.key === 'g' && hasShapes) {
-              e.preventDefault();
-              if (e.shiftKey) {
-                ungroupSelected();
-              } else {
-                groupSelected();
+      if (activeTool === 'pointer' && selectedShapeIds.length > 0) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          deleteSelectedShape();
+const p1 = { x: parseFloat(s.attributes['data-start-x']), y: parseFloat(s.attributes['data-start-y']) };
+                const p2 = { x: parseFloat(s.attributes['data-end-x']), y: parseFloat(s.attributes['data-end-y']) };
+                const sw = parseFloat(patch['stroke-width']) || 2;
+                const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                const headLen = Math.min(sw * 10, dist * 0.3);
+                const ao = Math.PI / 6;
+                const h1 = { x: p2.x - headLen * Math.cos(angle - ao), y: p2.y - headLen * Math.sin(angle - ao) };
+                const h2 = { x: p2.x - headLen * Math.cos(angle + ao), y: p2.y - headLen * Math.sin(angle + ao) };
+                newAttrs.d = `M ${h1.x} ${h1.y} L ${p2.x} ${p2.y} L ${h2.x} ${h2.y} M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
               }
+              return { ...s, attributes: newAttrs };
+            }
+            if (s.children && s.children.length > 0) {
+              return { ...s, children: patchRecursive(s.children) };
+            }
+            return s;
+          });
+        };
+        const updatedShapes = patchRecursive(prev.shapes);
+
+        // Defer the parent notification so it doesn't trigger a setState on
+        // CadEditorWorkspace while CadEditorCanvas is still in its own render.
+        if (onSvgModified) {
+          const svgString = serializeStateToSvgString(updatedShapes, prev.viewBox);
+          setTimeout(() => {
+            internalUpdateRef.current = true;
+            onSvgModified(svgString);
+          }, 0);
+        }
+
+        return { ...prev, shapes: updatedShapes };
+      });
+    };
+    window.addEventListener('cad-patch-shape', handler);
+    return () => window.removeEventListener('cad-patch-shape', handler);
+  }, [onSvgModified]);
+
+  const deleteSelectedShape = () => {
+    if (selectedShapeIds.length === 0) return;
+    let newShapes = [...documentState.shapes];
+    for (const id of selectedShapeIds) {
+      newShapes = deleteShapeDeep(newShapes, id);
+    }
+    setDocumentState({ ...documentState, shapes: newShapes });
+    setSelectedShapeIds([]);
+    if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
+  };
+
+  const duplicateShape = (shapeObj) => {
+    if (!shapeObj) return;
+    const newId = `cad-shape-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const offsetShape = offsetShapeAttrs(JSON.parse(JSON.stringify(shapeObj)), 20, 20);
+    const newShape = { ...offsetShape, id: newId };
+
+    setDocumentState(prev => {
+      const newShapes = [...prev.shapes, newShape];
+      if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, prev.viewBox));
+      return { ...prev, shapes: newShapes };
+    });
+
+    setTimeout(() => {
+      onToolChange?.('pointer');
+      setSelectedShapeIds([newId]);
+    }, 50);
+  };
+
+  const groupSelected = () => {
+    if (selectedShapeIds.length < 2) return;
+    const groupId = `cad-group-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const children = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)?.shape).filter(Boolean);
+    let newShapes = [...documentState.shapes];
+    for (const id of selectedShapeIds) {
+      newShapes = deleteShapeDeep(newShapes, id);
+    }
+    const groupShape = { id: groupId, type: 'g', attributes: {}, children: JSON.parse(JSON.stringify(children)) };
+    newShapes.push(groupShape);
+    setDocumentState({ ...documentState, shapes: newShapes });
+    if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
+    setSelectedShapeIds([groupId]);
+  };
+
+  const ungroupSelected = () => {
+    if (selectedShapeIds.length === 0) return;
+    let newShapes = [...documentState.shapes];
+    const newIds = [];
+    for (const id of selectedShapeIds) {
+      const shape = findShapeDeep(newShapes, id)?.shape;
+      if (shape && shape.type === 'g' && shape.children?.length > 0) {
+        newShapes = deleteShapeDeep(newShapes, id);
+        for (const child of shape.children) {
+          newShapes.push(child);
+          newIds.push(child.id);
+        }
+      } else {
+        newIds.push(id);
+      }
+    }
+    setDocumentState({ ...documentState, shapes: newShapes });
+    if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
+    setSelectedShapeIds(newIds);
+  };
+
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space' && !isSpaceDownRef.current) {
+        setIsSpaceDown(true);
+        isSpaceDownRef.current = true;
+      }
+
+      if (e.key === 'Escape') {
+        if (activeTool === 'vector_eraser' && veDragging) {
+          setVeDragging(false);
+          setVeModified(false);
+        } else if (activeTool === 'partial_delete' && (marquee || pdHits.length > 0)) {
+          setMarquee(null);
+          setMarqueeActive(false);
+          setPdHits([]);
+        } else if (drawStart || drawPoints.length > 0) {
+          setDrawStart(null);
+          setDrawEnd(null);
+          setCurrentDrawCoords(null);
+          setDrawStep(0);
+          setDrawPoints([]);
+        } else if (selectedShapeIds.length > 0) {
+          setSelectedShapeIds([]);
+        }
+      }
+
+      // ── Partial Delete: Delete key commits the deletion ────────────────
+      if (activeTool === 'partial_delete' && pdHits.length > 0 &&
+        (e.key === 'Delete' || e.key === 'Backspace')) {
+        e.preventDefault();
+        let newShapes = [...documentState.shapes];
+
+        // Process each hit shape
+        const hitsByShape = new Map();
+        for (const hit of pdHits) {
+          if (!hitsByShape.has(hit.shapeId)) {
+            hitsByShape.set(hit.shapeId, []);
+          }
+          hitsByShape.get(hit.shapeId).push(...hit.hitIndices);
+        }
+
+        const replaceInTree = (shapes, targetId, replacementNodes) => {
+          const result = [];
+          for (const s of shapes) {
+            if (s.id === targetId) {
+              result.push(...replacementNodes);
+            } else {
+              if (s.children?.length) {
+                result.push({ ...s, children: replaceInTree(s.children, targetId, replacementNodes) });
+              } else {
+                result.push(s);
+              }
+            }
+          }
+          return result;
+        };
+
+        for (const [shapeId, hitIndices] of hitsByShape) {
+          const shapeResult = findShapeDeep(newShapes, shapeId);
+          if (!shapeResult) continue;
+
+          const replacements = applyPartialDelete(shapeResult.shape, hitIndices);
+          if (!replacements) continue;
+
+          newShapes = replaceInTree(newShapes, shapeId, replacements);
+        }
+
+        setDocumentState(prev => ({ ...prev, shapes: newShapes }));
+        notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
+        setMarquee(null);
+        setMarqueeActive(false);
+        setPdHits([]);
+        console.log('[PartialDelete] Deleted segments from', hitsByShape.size, 'shape(s)');
+      }
+
+      if (activeTool === 'pointer' && selectedPlacementIds.length > 0) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          for (const id of selectedPlacementIds) {
+            deleteAmenityPlacement(id).then(() => {
+              // Note: Assuming setPlacedAmenities passed or handling is needed
+              // setPlacedAmenities(prev => prev.filter(p => p.id !== id));
+            }).catch(console.error);
+          }
+          setSelectedPlacementIds([]);
+        }
+      }
+
+      if (activeTool === 'pointer' && selectedShapeIds.length > 0) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          deleteSelectedShape();
+        }
+
+        if (e.ctrlKey || e.metaKey) {
+          if (e.key === 'c') {
+            e.preventDefault();
+            const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)?.shape).filter(Boolean);
+            if (shapesToCopy.length > 0) {
+              setClipboard(JSON.parse(JSON.stringify(shapesToCopy)));
+            }
+          }
+          if (e.key === 'x') {
+            e.preventDefault();
+            const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)?.shape).filter(Boolean);
+            if (shapesToCopy.length > 0) {
+              setClipboard(JSON.parse(JSON.stringify(shapesToCopy)));
+              deleteSelectedShape();
+            }
+          }
+          if (e.key === 'd') {
+            e.preventDefault();
+            const shapesToCopy = selectedShapeIds.map(id => findShapeDeep(documentState.shapes, id)?.shape).filter(Boolean);
+            shapesToCopy.forEach(s => duplicateShape(JSON.parse(JSON.stringify(s))));
+          }
+          if (e.key === 'g') {
+            e.preventDefault();
+            if (e.shiftKey) {
+              // Ungroup
+              ungroupSelected();
+            } else {
+              // Group
+              groupSelected();
             }
           }
         }
@@ -1149,7 +1322,7 @@ export default function CadEditorCanvas({
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'v' && clipboard) {
         e.preventDefault();
-        executeBulkPaste(clipboard);
+        if (Array.isArray(clipboard)) clipboard.forEach(s => duplicateShape(JSON.parse(JSON.stringify(s))));
       }
     };
 
@@ -1157,7 +1330,18 @@ export default function CadEditorCanvas({
       if (e.code === 'Space') {
         setIsSpaceDown(false);
         isSpaceDownRef.current = false;
-        isDragging.current = false;
+      }
+      if (isDragging.current) {
+        const now = performance.now();
+        if (now - inertiaVelocity.current.time < 50) {
+           startInertia();
+        }
+      }
+      isDragging.current = false;
+      lastPinch.current = null;
+    } else if (activePointers.current.size === 1) {
+      inertiaVelocity.current = { x: 0, y: 0, time: performance.now() };
+    }
       }
     };
 
@@ -1228,7 +1412,25 @@ export default function CadEditorCanvas({
     });
   };
 
-  const handlePointerDown = (e) => {
+  
+  const startInertia = () => {
+    if (inertiaFrame.current) cancelAnimationFrame(inertiaFrame.current);
+    if (Math.abs(inertiaVelocity.current.x) < 0.5 && Math.abs(inertiaVelocity.current.y) < 0.5) return;
+    
+    transform.current.x += inertiaVelocity.current.x;
+    transform.current.y += inertiaVelocity.current.y;
+    
+    inertiaVelocity.current.x *= 0.92;
+    inertiaVelocity.current.y *= 0.92;
+    
+    requestUpdate();
+    
+    if (Math.abs(inertiaVelocity.current.x) >= 0.5 || Math.abs(inertiaVelocity.current.y) >= 0.5) {
+      inertiaFrame.current = requestAnimationFrame(startInertia);
+    }
+  };
+
+const handlePointerDown = (e) => {
     // Deselect placements when clicking on empty canvas
     if (activeTool === 'pointer' && e.button === 0 && selectedPlacementIds.length > 0) {
       setSelectedPlacementIds([]);
@@ -1242,16 +1444,9 @@ export default function CadEditorCanvas({
       }
     }
 
+    if (readOnly) return;
+
     // ── Partial Delete: start marquee ──────────────────────────────────
-    if (readOnly) {
-      // In read-only mode allow pan via left-drag, middle-click, or space+drag
-      if (e.button === 1 || isSpaceDownRef.current || e.button === 0) {
-        isDragging.current = true;
-        lastMouse.current = { x: e.clientX, y: e.clientY };
-        e.preventDefault();
-      }
-      return;
-    }
     if (activeTool === 'partial_delete' && e.button === 0) {
       const coords = getSvgInternalCoords(e.clientX, e.clientY);
       if (coords) {
@@ -1318,7 +1513,7 @@ export default function CadEditorCanvas({
       return;
     }
 
-    if (activeTool === 'draw_line' || activeTool === 'draw_circle' || activeTool === 'draw_arrow' || activeTool === 'draw_curve') {
+    if (activeTool === 'draw_circle' || activeTool === 'draw_arrow' || activeTool === 'draw_curve') {
       if (e.button === 0) {
         if (selectedShapeIds.length > 0) setSelectedShapeIds([]);
         const internalCoords = getSvgInternalCoords(e.clientX, e.clientY);
@@ -1337,6 +1532,22 @@ export default function CadEditorCanvas({
         e.preventDefault();
         return;
       }
+    } else if (activeTool === 'draw_line' && e.button === 0) {
+      if (selectedShapeIds.length > 0) setSelectedShapeIds([]);
+      const internalCoords = getSvgInternalCoords(e.clientX, e.clientY);
+      if (internalCoords) {
+        if (!drawStart) {
+          setDrawStart(internalCoords);
+          setCurrentDrawCoords(internalCoords);
+        } else {
+          commitDrawing(drawStart, internalCoords);
+          setDrawStart(null);
+          setCurrentDrawCoords(null);
+        }
+      }
+      e.stopPropagation();
+      e.preventDefault();
+      return;
     } else if (activeTool === 'draw_polygon' && e.button === 0) {
       if (selectedShapeIds.length > 0) setSelectedShapeIds([]);
       const internalCoords = getSvgInternalCoords(e.clientX, e.clientY);
@@ -1529,91 +1740,25 @@ export default function CadEditorCanvas({
         else boundaryEl.setAttribute('stroke-opacity', prevStrokeOpacity);
       }, 350);
 
-      // ── Extract exact geometry (never approximate) ──────────────────────
-      const geometry = paintBucketExtractGeometry(boundaryEl, svgEl);
-      if (!geometry) {
-        e.stopPropagation();
-        return;
+      const boundaryRef = boundaryEl.id || boundaryEl.getAttribute('data-plot-id') || resolveShapeId(boundaryEl);
+      if (boundaryRef && setShapeAppearances) {
+        setShapeAppearances(prev => ({
+          ...prev,
+          [boundaryRef]: {
+            cadRegionId: boundaryRef,
+            fillColor: fillColor,
+            strokeColor: null
+          }
+        }));
       }
 
-      // ── Replace or create hatch ─────────────────────────────────────────
-      // Use the boundary element's ID for reliable duplicate detection.
-      // After the Plot Detection Engine runs, every closed plot has a stable
-      // id ("cad-plot-<N>"), so this is simply boundaryEl.id in the normal case.
-      // resolveShapeId is a fallback for user-drawn shapes that went through
-      // parseSvgStringToState and have a documentState-tracked id instead.
-      const boundaryRef = boundaryEl.id || resolveShapeId(boundaryEl) || '';
-        
-        // Added logic: Update existing shape directly if it is hit!
-        const existingShapeResult = boundaryRef ? findShapeDeep(documentState.shapes, boundaryRef) : null;
-        if (existingShapeResult) {
-          const currentAttrs = existingShapeResult.shape.attributes;
-          const originalFill = currentAttrs['data-original-fill'] ?? (currentAttrs.fill !== undefined ? currentAttrs.fill : 'MISSING');
-          const originalFillOpacity = currentAttrs['data-original-fill-opacity'] ?? (currentAttrs['fill-opacity'] !== undefined ? currentAttrs['fill-opacity'] : 'MISSING');
-          
-          const updatedShapes = updateShapeAtPath(documentState.shapes, existingShapeResult.path, {
-            ...existingShapeResult.shape,
-            attributes: { 
-              ...currentAttrs, 
-              fill: fillColor, 
-              'fill-opacity': String(fillOpacity), 
-              'data-cad-custom-fill': 'true',
-              'data-original-fill': originalFill,
-              'data-original-fill-opacity': originalFillOpacity
-            }
-          });
-          setDocumentState(prev => ({ ...prev, shapes: updatedShapes }));
-          notifySvgModified(serializeStateToSvgString(updatedShapes, documentState.viewBox));
-          e.stopPropagation();
-          return;
-        }
-
-        const existingIdx = boundaryRef
-          ? documentState.shapes.findIndex(
-            s => s.attributes?.['data-cad-type'] === 'hatch' &&
-              s.attributes?.['data-boundary-ref'] === boundaryRef
-          )
-          : -1;
-
-      if (existingIdx !== -1) {
-        const updatedShapes = documentState.shapes.map((s, i) =>
-          i === existingIdx
-            ? { ...s, attributes: { ...s.attributes, fill: fillColor, 'fill-opacity': String(fillOpacity) } }
-            : s
-        );
-        setDocumentState(prev => ({ ...prev, shapes: updatedShapes }));
-        notifySvgModified(serializeStateToSvgString(updatedShapes, documentState.viewBox));
-        e.stopPropagation();
-        return;
-      }
-
-      // Prepend new hatch so it renders below all DWG geometry
-      const hatchId = `hatch-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-      const hatchAttributes = { ...geometry.attributes };
-        delete hatchAttributes['data-plot-id'];
-
-        const hatchShape = {
-          id: hatchId,
-          type: geometry.type,
-          attributes: {
-            ...hatchAttributes,
-            fill: fillColor,
-          'fill-opacity': String(fillOpacity),
-          stroke: 'none',
-          'data-cad-type': 'hatch',
-          'data-boundary-ref': boundaryRef,
-          'pointer-events': 'none',
-        },
-        rawTransform: geometry.transform || '',
-        children: [],
-      };
-
-      const newShapes = [hatchShape, ...documentState.shapes];
-      setDocumentState(prev => ({ ...prev, shapes: newShapes }));
-      notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
+      e.stopPropagation();
+      return;
 
       e.stopPropagation();
     } else if (e.button === 0) {
+      if (activeTool !== 'pointer') return;
+      
       let shapeId = null;
 
       if (activeTool === 'pointer') {
@@ -1622,6 +1767,10 @@ export default function CadEditorCanvas({
           const hit = cadHitTestRegion(svgEl, e.clientX, e.clientY);
           if (hit) {
             const boundaryEl = hit.element;
+            // Prefer the DOM element's own id (set when the SVG has been round-tripped
+            // through the editor). Fall back to resolveShapeId which walks up the tree
+            // and matches against documentState — this handles freshly-converted SVGs
+            // whose path elements carry no id attribute yet.
             shapeId = boundaryEl.id || resolveShapeId(boundaryEl);
 
             const prevStroke = boundaryEl.getAttribute('stroke');
@@ -1640,41 +1789,40 @@ export default function CadEditorCanvas({
             }, 350);
           }
         }
+      }
 
-        if (!shapeId && isShape) {
-          shapeId = resolveShapeId(target);
+      if (!shapeId && isShape) {
+        shapeId = resolveShapeId(target);
+      }
+
+      if (shapeId) {
+        if (e.shiftKey) {
+          setSelectedShapeIds(prev => prev.includes(shapeId) ? prev.filter(id => id !== shapeId) : [...prev, shapeId]);
+        } else {
+          setSelectedShapeIds([shapeId]);
         }
 
-        if (shapeId) {
-          if (e.shiftKey) {
-            setSelectedShapeIds(prev => prev.includes(shapeId) ? prev.filter(id => id !== shapeId) : [...prev, shapeId]);
-          } else {
-            setSelectedShapeIds([shapeId]);
+        // Double click to edit text
+        if ((tag === 'text' || tag === 'tspan') && e.detail === 2) {
+          if (readOnly) return;
+          const shape = findShapeDeep(documentState.shapes, shapeId)?.shape;
+          if (shape) {
+            const internalCoords = getSvgInternalCoords(e.clientX, e.clientY);
+            setTextInput({
+              x: shape.attributes.x || (internalCoords ? internalCoords.x : 0),
+              y: shape.attributes.y || (internalCoords ? internalCoords.y : 0),
+              value: shape.textContent || '',
+              screenX: e.clientX,
+              screenY: e.clientY - 10,
+              editingShapeId: shape.id
+            });
           }
-
-          // Double click to edit text
-          if ((tag === 'text' || tag === 'tspan') && e.detail === 2) {
-            if (!readOnly) {
-              const shape = findShapeDeep(documentState.shapes, shapeId)?.shape;
-              if (shape) {
-                const internalCoords = getSvgInternalCoords(e.clientX, e.clientY);
-                setTextInput({
-                  x: shape.attributes.x || (internalCoords ? internalCoords.x : 0),
-                  y: shape.attributes.y || (internalCoords ? internalCoords.y : 0),
-                  value: shape.textContent || '',
-                  screenX: e.clientX,
-                  screenY: e.clientY - 10,
-                  editingShapeId: shape.id
-                });
-              }
-            }
-          }
-
-          e.stopPropagation();
-        } else if ((tag === 'svg' || target.closest('[data-cad-type="background"]')) && selectedShapeIds.length > 0) {
-          // Clicking empty canvas or background deselects the current object (MS Paint behavior)
-          setSelectedShapeIds([]);
         }
+
+        e.stopPropagation();
+      } else if ((tag === 'svg' || target.closest('[data-cad-type="background"]')) && selectedShapeIds.length > 0) {
+        // Clicking empty canvas or background deselects the current object (MS Paint behavior)
+        setSelectedShapeIds([]);
       }
     }
   };
@@ -1795,6 +1943,7 @@ export default function CadEditorCanvas({
     }
     
     setSelectedShapeIds([shapeId]);
+    onToolChange?.('pointer');
   };
 
   const commitDrawingCurve = (start, control, end) => {
@@ -1815,6 +1964,7 @@ export default function CadEditorCanvas({
     }
     
     setSelectedShapeIds([shapeId]);
+    onToolChange?.('pointer');
   };
 
   const commitDrawingPolygon = (points) => {
@@ -1836,6 +1986,7 @@ export default function CadEditorCanvas({
     if (onSvgModified) notifySvgModified(serializeStateToSvgString(newShapes, documentState.viewBox));
     
     setSelectedShapeIds([shapeId]);
+    onToolChange?.('pointer');
   };
 
   const commitText = (tInput) => {
@@ -1873,6 +2024,7 @@ export default function CadEditorCanvas({
 
     setTextInput(null);
     setSelectedShapeIds([shapeId]);
+    onToolChange?.('pointer');
   };
 
   const calculateArrowPath = (start, end, strokeW) => {
@@ -1893,10 +2045,7 @@ export default function CadEditorCanvas({
   };
 
   const handlePointerUp = (e) => {
-    if (readOnly) {
-      isDragging.current = false;
-      return;
-    }
+    if (readOnly) return;
     if (activeTool === 'draw_curve' && drawStep === 2 && drawStart && drawEnd) {
       const internalCoords = getSvgInternalCoords(e.clientX, e.clientY) || currentDrawCoords;
       const midX = (drawStart.x + drawEnd.x) / 2;
@@ -1915,7 +2064,7 @@ export default function CadEditorCanvas({
       return;
     }
 
-    if (drawStart && currentDrawCoords && activeTool !== 'draw_curve') {
+    if (drawStart && currentDrawCoords && activeTool !== 'draw_curve' && activeTool !== 'draw_line') {
       const endCoords = getSvgInternalCoords(e.clientX, e.clientY) || currentDrawCoords;
 
       commitDrawing(drawStart, endCoords);
@@ -2010,6 +2159,7 @@ export default function CadEditorCanvas({
       });
       setPlacedAmenities(prev => [...prev, newPlacement]);
       setSelectedPlacementIds([newPlacement.id]);
+      onToolChange?.('pointer');
     } catch (err) {
       console.error('Drop error:', err);
     }
@@ -2050,42 +2200,6 @@ export default function CadEditorCanvas({
     return isDragging.current ? 'grabbing' : 'grab';
   };
 
-  // ── Focus Mode ────────────────────────────────────────────────────────────
-  // In readOnly mode (the public viewer), selecting one plot dims everything
-  // else. We derive this entirely from the existing selectedShapeIds state —
-  // no new props, no new state, no ShapeRenderer changes.
-  const focusedId = readOnly && selectedShapeIds.length === 1
-    ? selectedShapeIds[0]
-    : null;
-
-  // Build the CSS string only when the focused ID changes.
-  // Interpolating the ID into the selector is the only way to target a
-  // specific SVG element by ID in CSS without touching the React render tree.
-  const focusModeCSS = focusedId
-    ? `
-      /* ── Focus Mode: dim everything, then re-brighten the selected plot ── */
-      .cad-svg-container.focus-active svg > * {
-        opacity: 0.3;
-        transition: opacity 180ms ease, fill 180ms ease;
-      }
-      /* The focused plot shape — keep at full opacity */
-      .cad-svg-container.focus-active svg #${CSS.escape(focusedId)} {
-        opacity: 1 !important;
-        transition: opacity 180ms ease, fill 180ms ease;
-      }
-      /* The label belonging to the focused plot */
-      .cad-svg-container.focus-active svg #plot-labels-overlay g[data-label-for="${CSS.escape(focusedId)}"] {
-        opacity: 1 !important;
-        transition: opacity 180ms ease;
-      }
-    `
-    : `
-      /* ── Focus Mode off: restore all elements ── */
-      .cad-svg-container svg > * {
-        transition: opacity 180ms ease, fill 180ms ease;
-      }
-    `;
-
   return (
     <>
       <style>{`
@@ -2124,7 +2238,6 @@ export default function CadEditorCanvas({
           cursor: cell !important;
         }
       `}</style>
-      <style>{focusModeCSS}</style>
       <div
         ref={containerRef}
         data-tool={activeTool}
@@ -2139,6 +2252,7 @@ export default function CadEditorCanvas({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
       >
@@ -2149,7 +2263,7 @@ export default function CadEditorCanvas({
         >
           <div
             ref={svgRef}
-            className={`text-white w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full cad-svg-container${focusedId ? ' focus-active' : ''} ${(activeTool === 'pointer' || activeTool === 'eraser' || activeTool === 'paint_bucket' || activeTool === 'partial_delete' || activeTool === 'vector_eraser' || activeTool === 'draw_line' || activeTool === 'draw_arrow' || activeTool === 'draw_circle' || activeTool === 'draw_polygon' || activeTool === 'draw_curve' || activeTool === 'draw_text') ? 'pointer-events-auto' : 'pointer-events-none'}`}
+            className={`text-white w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full cad-svg-container ${(activeTool === 'pointer' || activeTool === 'eraser' || activeTool === 'paint_bucket' || activeTool === 'partial_delete' || activeTool === 'vector_eraser' || activeTool === 'draw_line' || activeTool === 'draw_arrow' || activeTool === 'draw_circle' || activeTool === 'draw_polygon' || activeTool === 'draw_curve' || activeTool === 'draw_text') ? 'pointer-events-auto' : 'pointer-events-none'}`}
           >
             <svg
               viewBox={documentState.viewBox}
@@ -2165,7 +2279,10 @@ export default function CadEditorCanvas({
                   plots={plots}
                   statuses={statuses}
                   showPlotStatus={showPlotStatus}
+                  shapeAppearances={shapeAppearances}
+                  plotDelays={plotDelays}
                   readOnly={readOnly}
+                  layoutLineColor={layoutLineColor}
                 />
               ))}
               <PlotLabelsOverlay
@@ -2175,7 +2292,6 @@ export default function CadEditorCanvas({
                 plots={plots}
                 onLabelDragEnd={onLabelDragEnd}
                 readOnly={readOnly}
-                projectConfig={projectConfig}
                 selectedShapeIds={selectedShapeIds}
               />
               <AmenitiesOverlay
@@ -2315,7 +2431,7 @@ export default function CadEditorCanvas({
 
                 {!readOnly && selectedShapeIds.length === 1 && (
                   <TransformControls
-                    shape={findShapeDeep(documentState.shapes, selectedShapeIds[0])?.shape}
+                    shape={findShapeDeep(documentState.shapes, selectedShapeIds[0])}
                     shapeId={selectedShapeIds[0]}
                     svgRef={svgRef}
                     scale={transform.current.scale}
@@ -2356,6 +2472,13 @@ export default function CadEditorCanvas({
             </div>
           )}
         </div>
+
+        {readOnly && (
+          <CompassControl
+            rotation={transform.current.rotation}
+            onResetNorth={handleResetNorth}
+          />
+        )}
 
         {/* Floating Text Input */}
         {textInput && (

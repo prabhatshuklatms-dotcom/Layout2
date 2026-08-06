@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import L from 'leaflet';
 import { BASE_URL } from '@/lib/api';
-import PlotLabelsOverlay from '../cad-conversion/PlotLabelsOverlay';
-import { resolvePlotFill } from '../cad-conversion/editor/ShapeRenderer';
+import { resolvePlotFill } from '../shared/appearance/appearanceResolver';
 
 export default function LayoutTransformNode({ 
   layout, 
@@ -34,13 +33,19 @@ export default function LayoutTransformNode({
     
     const plotNodes = svgEl.querySelectorAll('[data-plot-id]');
     plotNodes.forEach(node => {
+      // Backup the initial raw SVG fill before any mutations occur
+      if (!node.hasAttribute('data-cad-initial-fill')) {
+        node.setAttribute('data-cad-initial-fill', node.getAttribute('fill') || '');
+      }
+
       // Reconstruct shape context for the resolver
       const shape = {
         attributes: {
           'data-plot-id': node.getAttribute('data-plot-id'),
           'data-cad-custom-fill': node.getAttribute('data-cad-custom-fill'),
           'data-original-fill': node.getAttribute('data-original-fill'),
-          'fill': node.getAttribute('fill')
+          // ALWAYS read the pristine initial fill, never the mutated one
+          'fill': node.getAttribute('data-cad-initial-fill') || node.getAttribute('fill')
         }
       };
       
@@ -443,14 +448,33 @@ export default function LayoutTransformNode({
   const normalAngleDeg = Math.atan2(ny, nx) * 180 / Math.PI;
 
   const content = (
-    <div style={{ width: `${imgSize.w}px`, height: `${imgSize.h}px`, pointerEvents: 'none', userSelect: 'none' }}>
+    <div 
+      className="cad-viewer-global-styles"
+      style={{ 
+        width: `${imgSize.w}px`, 
+        height: `${imgSize.h}px`, 
+        pointerEvents: 'none', 
+        userSelect: 'none',
+        '--layout-line-color': layout.layoutLineColor || '#ffffff'
+      }}
+    >
+      <style>{`
+        .cad-viewer-global-styles svg path:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+        .cad-viewer-global-styles svg line:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+        .cad-viewer-global-styles svg polyline:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+        .cad-viewer-global-styles svg polygon:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+        .cad-viewer-global-styles svg rect:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+        .cad-viewer-global-styles svg circle:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+        .cad-viewer-global-styles svg ellipse:not([stroke="none"]):not([stroke="transparent"]):not([filter]) {
+          stroke: var(--layout-line-color) !important;
+        }
+      `}</style>
       <div 
         ref={svgContainerRef}
         dangerouslySetInnerHTML={{ __html: svgRaw }}
         style={{ width: '100%', height: '100%', opacity: 0.85, pointerEvents: 'none', position: 'absolute', top: 0, left: 0 }} 
       />
       <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
-        <PlotLabelsOverlay svgRef={svgContainerRef} plots={plots} />
         <polygon 
           points={polygonPoints} 
           fill="transparent" 

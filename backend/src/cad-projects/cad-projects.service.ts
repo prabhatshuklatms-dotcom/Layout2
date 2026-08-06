@@ -63,7 +63,7 @@ export class CadProjectsService {
     return project;
   }
 
-  async update(id: number, data: { name?: string; latitude?: number; longitude?: number; mapZoom?: number; address?: string; city?: string; state?: string; country?: string }) {
+  async update(id: number, data: { name?: string; latitude?: number; longitude?: number; mapZoom?: number; address?: string; city?: string; state?: string; country?: string; labelFontSize?: number; labelFontFamily?: string; labelFontColor?: string }) {
     return this.prisma.cadProject.update({
       where: { id },
       data: { 
@@ -75,6 +75,9 @@ export class CadProjectsService {
         ...(data.city !== undefined && { city: data.city }),
         ...(data.state !== undefined && { state: data.state }),
         ...(data.country !== undefined && { country: data.country }),
+        ...(data.labelFontSize !== undefined && { labelFontSize: data.labelFontSize }),
+        ...(data.labelFontFamily !== undefined && { labelFontFamily: data.labelFontFamily }),
+        ...(data.labelFontColor !== undefined && { labelFontColor: data.labelFontColor }),
       }
     });
   }

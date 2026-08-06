@@ -1,6 +1,38 @@
 import React, { useState, useEffect } from 'react';
+import polylabel from 'polylabel';
 
 function pbComputeCentroid(element) {
+  try {
+    // 1. Try to find the visual center using polylabel
+    let pathEl = element;
+    
+    // If it's a group, try to find a path or polygon inside it
+    if (element.tagName.toLowerCase() === 'g') {
+      pathEl = element.querySelector('path, polygon, rect') || element;
+    }
+
+    if (pathEl && typeof pathEl.getTotalLength === 'function') {
+      const length = pathEl.getTotalLength();
+      if (length > 0) {
+        const points = [];
+        const numSamples = 50; // Adequate for most plot shapes
+        for (let i = 0; i < numSamples; i++) {
+          const pt = pathEl.getPointAtLength((i / numSamples) * length);
+          points.push([pt.x, pt.y]);
+        }
+        
+        // 2. Calculate visual center using polylabel
+        const center = polylabel([points], 1.0);
+        if (!isNaN(center[0]) && !isNaN(center[1])) {
+          return { x: center[0], y: center[1] };
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore and fallback
+  }
+
+  // 3. Fallback to bounding box for unsupported elements
   try {
     const bbox = element.getBBox();
     return {
@@ -12,7 +44,7 @@ function pbComputeCentroid(element) {
   }
 }
 
-export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readOnly, selectedShapeIds }) {
+export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readOnly, selectedShapeIds, projectConfig }) {
   const [labels, setLabels] = useState([]);
   const [dragState, setDragState] = useState(null);
 
@@ -79,14 +111,6 @@ export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readO
               id: el.id,
               plot,
               attributes: {
-                'data-label-fontsize': el.getAttribute('data-label-fontsize'),
-                'data-label-fontfamily': el.getAttribute('data-label-fontfamily'),
-                'data-label-color': el.getAttribute('data-label-color'),
-                'data-label-show-area': el.getAttribute('data-label-show-area'),
-                'data-label-show-width': el.getAttribute('data-label-show-width'),
-                'data-label-show-height': el.getAttribute('data-label-show-height'),
-                'data-label-rotation': el.getAttribute('data-label-rotation'),
-                'data-label-align': el.getAttribute('data-label-align'),
                 'data-label-dx': el.getAttribute('data-label-dx'),
                 'data-label-dy': el.getAttribute('data-label-dy'),
               },
@@ -160,32 +184,33 @@ export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readO
         }
 
         const isSelected = selectedShapeIds?.includes(id);
-        const color = attributes['data-label-color'] || '#ffffff';
+        const color = projectConfig?.labelFontColor || '#FFFFFF';
+        const fontFamily = projectConfig?.labelFontFamily || 'sans-serif';
         const showArea = isSelected;
         const showWidth = false; // Dimensions are handled by geometry overlay
         const showHeight = false;
-        const rotationAttr = parseFloat(attributes['data-label-rotation'] || 0);
-        const alignAttr = attributes['data-label-align'] || 'middle';
+        const rotationAttr = 0;
+        const alignAttr = 'middle';
 
-        let baseFontSize = parseFloat(attributes['data-label-fontsize']);
-        if (!baseFontSize || isNaN(baseFontSize)) baseFontSize = label.globalFallbackFontSize;
+        let baseFontSize = projectConfig?.labelFontSize;
+        if (!baseFontSize || isNaN(baseFontSize)) baseFontSize = 2;
 
         let textX = 0;
         let lines = [];
-        lines.push({ text: plot.plotNumber || '?', size: baseFontSize * 1.5, weight: 'bold', color });
+        lines.push({ text: plot.plotNumber || '?', size: baseFontSize * 1.5, color });
         
         if (showArea) {
-          if (plot.areaSqFt) lines.push({ text: `${plot.areaSqFt} sq ft`, size: baseFontSize * 0.9, weight: 'normal', color });
-          if (plot.areaSqYard) lines.push({ text: `${plot.areaSqYard} sq yd`, size: baseFontSize * 0.9, weight: 'normal', color });
-          if (plot.areaSqMeter) lines.push({ text: `${plot.areaSqMeter} m²`, size: baseFontSize * 0.9, weight: 'normal', color });
+          if (plot.areaSqFt) lines.push({ text: `${plot.areaSqFt} sq ft`, size: baseFontSize * 0.9, color });
+          if (plot.areaSqYard) lines.push({ text: `${plot.areaSqYard} sq yd`, size: baseFontSize * 0.9, color });
+          if (plot.areaSqMeter) lines.push({ text: `${plot.areaSqMeter} m²`, size: baseFontSize * 0.9, color });
         }
         if (showWidth && plot.width) {
-          lines.push({ text: 'Width', size: baseFontSize * 0.6, weight: 'normal', color, dy: baseFontSize * 0.4 });
-          lines.push({ text: `${plot.width} m`, size: baseFontSize * 0.85, weight: 'bold', color });
+          lines.push({ text: 'Width', size: baseFontSize * 0.6, color, dy: baseFontSize * 0.4 });
+          lines.push({ text: `${plot.width} m`, size: baseFontSize * 0.85, color });
         }
         if (showHeight && plot.height) {
-          lines.push({ text: 'Height', size: baseFontSize * 0.6, weight: 'normal', color, dy: baseFontSize * 0.4 });
-          lines.push({ text: `${plot.height} m`, size: baseFontSize * 0.85, weight: 'bold', color });
+          lines.push({ text: 'Height', size: baseFontSize * 0.6, color, dy: baseFontSize * 0.4 });
+          lines.push({ text: `${plot.height} m`, size: baseFontSize * 0.85, color });
         }
 
         let currentY = 0;
@@ -202,6 +227,7 @@ export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readO
         return (
           <g
             key={`label-${id}`}
+            data-label-for={id}
             transform={`translate(${renderX}, ${renderY}) rotate(${rotationAttr})`}
             className={onLabelDragEnd ? "cursor-move" : ""}
             onPointerDown={(e) => {
@@ -233,7 +259,10 @@ export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readO
                 textAnchor={alignAttr}
                 fill={l.color}
                 fontSize={l.size}
-                fontWeight={l.weight}
+                fontFamily={fontFamily}
+                fontWeight="600"
+                dominantBaseline="central"
+                textRendering="geometricPrecision"
                 y={l.y}
                 pointerEvents="none"
                 style={{ userSelect: 'none' }}

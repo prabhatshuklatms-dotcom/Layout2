@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getContrastYIQ } from '@/lib/utils';
 import Link from 'next/link';
+import { ColorPicker } from 'antd';
 
 const STROKE_SUPPORTED_TYPES = new Set([
   'line', 'polyline', 'path', 'rect', 'circle', 'ellipse', 'polygon',
@@ -9,7 +10,7 @@ const STROKE_SUPPORTED_TYPES = new Set([
 const MIN_STROKE = 0.01;
 const MAX_STROKE = 20;
 
-export default function CadEditorSidebar({ projectId, conversion, coords, activeTool, selectedShapes, fillColor, fillOpacity, eraserSize, plots, statuses, masterAmenities = [], onFillColorChange, onFillOpacityChange, onStrokeWidthChange, onEraserSizeChange, onAssignPlot }) {
+export default function CadEditorSidebar({ projectId, conversion, coords, activeTool, selectedShapes, fillColor, fillOpacity, eraserSize, plots, statuses, masterAmenities = [], projectConfig, onProjectLabelStyleChange, onLayoutLineColorChange, onFillColorChange, onFillOpacityChange, onStrokeWidthChange, onEraserSizeChange, onAssignPlot }) {
   const [localStroke, setLocalStroke] = useState(2);
   const [localEraser, setLocalEraser] = useState(1);
   
@@ -117,7 +118,81 @@ export default function CadEditorSidebar({ projectId, conversion, coords, active
           )}
         </div>
       </div>
+      {/* ── Global Label Style ──────────────────────────────────────────── */}
+      <div className="p-4 border-b border-zinc-800">
+        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Project Label Style</h3>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-zinc-400 block mb-1">Font Size</label>
+              <input 
+                type="number" 
+                min="0.1" step="0.1" max="100"
+                value={projectConfig?.labelFontSize ?? 2}
+                onChange={(e) => onProjectLabelStyleChange({ labelFontSize: parseFloat(e.target.value) || 2 })}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-zinc-400 block mb-1">Font Color</label>
+              <ColorPicker
+                value={projectConfig?.labelFontColor || '#ffffff'}
+                onChange={(_, hex) => onProjectLabelStyleChange({ labelFontColor: hex })}
+                showText
+                format="hex"
+                styles={{
+                  popup: { zIndex: 9999 }
+                }}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] text-zinc-400 block mb-1">Font Family</label>
+            <select 
+              value={projectConfig?.labelFontFamily || 'sans-serif'}
+              onChange={(e) => onProjectLabelStyleChange({ labelFontFamily: e.target.value })}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="sans-serif">Sans Serif</option>
+              <option value="serif">Serif</option>
+              <option value="monospace">Monospace</option>
+              <option value="Inter, sans-serif">Inter</option>
+              <option value="Roboto, sans-serif">Roboto</option>
+            </select>
+          </div>
+        </div>
+      </div>
 
+      {/* ── Global CAD Line Color ───────────────────────────────────────── */}
+      <div className="p-4 border-b border-zinc-800">
+        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">Global CAD Line Color</h3>
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <ColorPicker
+                value={conversion?.layoutLineColor || '#ffffff'}
+                onChange={(_, hex) => onLayoutLineColorChange(hex)}
+                showText
+                format="hex"
+                className="w-full"
+                styles={{
+                  popup: { zIndex: 9999 }
+                }}
+              />
+            </div>
+            <button
+              onClick={() => onLayoutLineColorChange(null)}
+              className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded transition-colors border border-zinc-700 h-8"
+              title="Reset to original CAD colors"
+            >
+              Reset
+            </button>
+          </div>
+          <p className="text-[10px] text-zinc-500 leading-tight">
+            Instantly overrides all layout boundaries, roads, and CAD linework. Does not affect fills or selections.
+          </p>
+        </div>
+      </div>
 
       {/* ── Properties ──────────────────────────────────────────────────── */}
       <div className="p-4 border-b border-zinc-800">
@@ -329,104 +404,7 @@ export default function CadEditorSidebar({ projectId, conversion, coords, active
                       </div>
                     )}
 
-                  {/* Label Configuration */}
-                  {selectedShape.attributes?.['data-plot-id'] && (
-                    <div className="mt-4 pt-4 border-t border-zinc-800 space-y-3">
-                      <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">Label Configuration</h4>
-                      
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] text-zinc-400 block mb-1">Font Size</label>
-                          <input 
-                            type="number" 
-                            min="6" max="72"
-                            value={selectedShape.attributes?.['data-label-fontsize'] || 12}
-                            onChange={(e) => onAssignPlot(null, null, { 'data-label-fontsize': e.target.value })}
-                            className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-zinc-400 block mb-1">Color</label>
-                          <div className="flex h-6 rounded border border-zinc-700 overflow-hidden">
-                            <input 
-                              type="color" 
-                              value={selectedShape.attributes?.['data-label-color'] || '#ffffff'}
-                              onChange={(e) => onAssignPlot(null, null, { 'data-label-color': e.target.value })}
-                              className="w-full h-full cursor-pointer bg-zinc-900 border-none p-0"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] text-zinc-400 block mb-1">Font Family</label>
-                        <select 
-                          value={selectedShape.attributes?.['data-label-fontfamily'] || 'sans-serif'}
-                          onChange={(e) => onAssignPlot(null, null, { 'data-label-fontfamily': e.target.value })}
-                          className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
-                        >
-                          <option value="sans-serif">Sans Serif</option>
-                          <option value="serif">Serif</option>
-                          <option value="monospace">Monospace</option>
-                        </select>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-[10px] text-zinc-400 block mb-1">Rotation (°)</label>
-                          <input 
-                            type="number" 
-                            min="-180" max="180" step="1"
-                            value={selectedShape.attributes?.['data-label-rotation'] || 0}
-                            onChange={(e) => onAssignPlot(null, null, { 'data-label-rotation': e.target.value })}
-                            className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-zinc-400 block mb-1">Alignment</label>
-                          <select 
-                            value={selectedShape.attributes?.['data-label-align'] || 'middle'}
-                            onChange={(e) => onAssignPlot(null, null, { 'data-label-align': e.target.value })}
-                            className="w-full bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
-                          >
-                            <option value="start">Left</option>
-                            <option value="middle">Center</option>
-                            <option value="end">Right</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5 pt-2 border-t border-zinc-800/50">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            checked={selectedShape.attributes?.['data-label-show-area'] !== 'false'}
-                            onChange={(e) => onAssignPlot(null, null, { 'data-label-show-area': e.target.checked ? 'true' : 'false' })}
-                            className="rounded bg-zinc-900 border-zinc-700 text-indigo-500 focus:ring-indigo-500/50"
-                          />
-                          <span className="text-xs text-zinc-300">Show Area</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            checked={selectedShape.attributes?.['data-label-show-width'] !== 'false'}
-                            onChange={(e) => onAssignPlot(null, null, { 'data-label-show-width': e.target.checked ? 'true' : 'false' })}
-                            className="rounded bg-zinc-900 border-zinc-700 text-indigo-500 focus:ring-indigo-500/50"
-                          />
-                          <span className="text-xs text-zinc-300">Show Width</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            checked={selectedShape.attributes?.['data-label-show-height'] !== 'false'}
-                            onChange={(e) => onAssignPlot(null, null, { 'data-label-show-height': e.target.checked ? 'true' : 'false' })}
-                            className="rounded bg-zinc-900 border-zinc-700 text-indigo-500 focus:ring-indigo-500/50"
-                          />
-                          <span className="text-xs text-zinc-300">Show Height / Depth</span>
-                        </label>
-                      </div>
-                    </div>
-                  )}
+                  {/* Removed per-plot label configuration */}
                 </div>
               )}
             </div>

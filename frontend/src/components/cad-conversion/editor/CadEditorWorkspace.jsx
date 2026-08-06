@@ -6,10 +6,11 @@ import CadEditorToolbar from './CadEditorToolbar';
 import CadEditorCanvas from './CadEditorCanvas';
 import CadEditorSidebar from './CadEditorSidebar';
 import { parseSvgStringToState, serializeStateToSvgString } from './SvgDocumentModel';
-import { getProjectPlots, getPlotStatuses, getProjectPlotStatuses, getAmenities, getAmenityPlacements, updateProjectPlotAssignment } from '@/lib/api';
+import { getProjectPlots, getPlotStatuses, getProjectPlotStatuses, getAmenities, getAmenityPlacements, updateProjectPlotAssignment, getCadProject, updateCadProject } from '@/lib/api';
 import Swal from 'sweetalert2';
-export default function CadEditorWorkspace({ conversionId, projectId, readOnly = false, showPlotStatus: showPlotStatusProp, onUserViewerSelection }) {
+export default function CadEditorWorkspace({ conversionId, projectId, readOnly = false, showPlotStatus: showPlotStatusProp, onUserViewerSelection, onZoomChange: onZoomChangeProp }) {
   const [conversion, setConversion] = useState(null);
+  const [projectConfig, setProjectConfig] = useState(null);
   const [svgContent, setSvgContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -44,13 +45,37 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
   const performSave = async (content) => {
     try {
       setIsSaving(true);
+
+      // Inject labels from DOM into the SVG payload using pure string manipulation
+      let finalSvgString = content;
+      try {
+        const labelsEl = document.getElementById('plot-labels-overlay');
+        if (labelsEl) {
+          // Grab the raw HTML string
+          const labelsString = labelsEl.outerHTML;
+          // Swap ID to avoid conflicts in editor but allow map detection
+          const injectedLabelsString = labelsString.replace('id="plot-labels-overlay"', 'id="composite-plot-labels"');
+          // Safely insert right before the closing </svg> tag
+          finalSvgString = content.replace(/<\/svg>\s*$/, injectedLabelsString + '\n</svg>');
+        }
+      } catch (err) {
+        console.error('Failed to inject labels into SVG during save:', err);
+      }
+
       const res = await fetch(`http://localhost:5000/api/cad-conversion/${conversionId}/svg`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ svg: content }),
+        body: JSON.stringify({ svg: finalSvgString }),
       });
       if (!res.ok) {
         throw new Error('Failed to save SVG');
+      }
+      if (projectConfig) {
+        await updateCadProject(projectId, {
+          labelFontSize: projectConfig.labelFontSize,
+          labelFontFamily: projectConfig.labelFontFamily,
+          labelFontColor: projectConfig.labelFontColor,
+        });
       }
       Swal.fire({
           icon: "success",
@@ -209,8 +234,9 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
     .catch(console.error);
 
     if (projectId) {
-      Promise.all([getProjectPlots(projectId), getProjectPlotStatuses(projectId)])
-        .then(([p, s]) => {
+      Promise.all([getCadProject(projectId), getProjectPlots(projectId), getProjectPlotStatuses(projectId)])
+        .then(([proj, p, s]) => {
+          setProjectConfig(proj);
           setPlots(p);
           setStatuses(s);
           
@@ -244,11 +270,6 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
                     sChanged = true;
                   }
                   const statusColor = s.find(stat => stat.id === matchingPlot.statusId)?.fillColor;
-                  if (statusColor && newAttrs['fill'] !== statusColor) {
-                    newAttrs['fill'] = statusColor;
-                    newAttrs['fill-opacity'] = '0.75';
-                    sChanged = true;
-                  }
                   
                   if (matchingPlot.metadata && matchingPlot.metadata.transform) {
                      if (newAttrs['transform'] !== matchingPlot.metadata.transform) {
@@ -297,6 +318,20 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
     );
   }
 
+  const handleLayoutLineColorChange = async (color) => {
+    if (!conversionId || conversionId === 'undefined') return;
+    setConversion(prev => ({ ...prev, layoutLineColor: color }));
+    try {
+      await fetch(`http://localhost:5000/api/cad-conversion/${conversionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layoutLineColor: color })
+      });
+    } catch (e) {
+      console.error('Failed to update line color', e);
+    }
+  };
+
   if (error) {
     return (
       <div className="h-screen w-full bg-[#0a0a0a] flex items-center justify-center text-red-500 flex-col gap-4">
@@ -343,7 +378,21 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
           />
         )}
 
-        <div className="flex-1 relative overflow-hidden bg-[#0a0a0a]">
+        <div 
+          className="flex-1 relative overflow-hidden bg-[#0a0a0a] cad-viewer-global-styles"
+          style={{ '--layout-line-color': conversion?.layoutLineColor || '#ffffff' }}
+        >
+          <style>{`
+            .cad-viewer-global-styles svg path:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+            .cad-viewer-global-styles svg line:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+            .cad-viewer-global-styles svg polyline:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+            .cad-viewer-global-styles svg polygon:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+            .cad-viewer-global-styles svg rect:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+            .cad-viewer-global-styles svg circle:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
+            .cad-viewer-global-styles svg ellipse:not([stroke="none"]):not([stroke="transparent"]):not([filter]) {
+              stroke: var(--layout-line-color) !important;
+            }
+          `}</style>
           <CadEditorCanvas
             readOnly={readOnly}
             svgContent={svgContent}
@@ -355,7 +404,7 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
             plots={plots}
             statuses={statuses}
             showPlotStatus={showPlotStatus}
-            onZoomChange={setZoomPercent}
+            onZoomChange={(pct) => { setZoomPercent(pct); if (onZoomChangeProp) onZoomChangeProp(pct); }}
             onCoordsChange={setCoords}
             onSvgModified={saveSvgContent}
             onToolChange={setActiveTool}
@@ -364,6 +413,7 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
             setPlacedAmenities={setPlacedAmenities}
             conversionId={conversionId}
             projectId={projectId}
+            projectConfig={projectConfig}
             onSelectionChange={(ids, shapes) => { 
               setSelectedShapeIds(ids); 
               setSelectedShapes(shapes); 
@@ -432,6 +482,9 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
             plots={plots}
             statuses={statuses}
             masterAmenities={masterAmenities}
+            projectConfig={projectConfig}
+            onProjectLabelStyleChange={(newStyles) => setProjectConfig(prev => ({ ...prev, ...newStyles }))}
+            onLayoutLineColorChange={handleLayoutLineColorChange}
             onFillColorChange={setFillColor}
             onFillOpacityChange={setFillOpacity}
             onStrokeWidthChange={handleShapeStrokeWidthChange}

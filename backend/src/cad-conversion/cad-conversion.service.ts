@@ -101,19 +101,7 @@ export class CadConversionService {
       }),
     ]);
 
-    // 3. Apply plot status fill colors to elements with data-plot-id
-    const plotElements = svgEl.querySelectorAll('[data-plot-id]');
-    plotElements.forEach((el: any) => {
-      const plotId = parseInt(el.getAttribute('data-plot-id'));
-      const plot = plots.find(p => p.id === plotId);
-      if (plot && plot.statusId) {
-        const status = statuses.find(s => s.id === plot.statusId);
-        if (status && status.fillColor) {
-          el.setAttribute('fill', status.fillColor);
-          el.style.fill = status.fillColor;
-        }
-      }
-    });
+
 
 
     // 5. Embed amenity images

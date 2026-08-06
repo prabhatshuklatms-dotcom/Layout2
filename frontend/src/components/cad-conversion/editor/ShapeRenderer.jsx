@@ -1,33 +1,5 @@
 import React from 'react';
-
-export function resolvePlotFill(shape, plots, statuses, showPlotStatus) {
-  const attrs = shape.attributes || {};
-  
-  // 1. Status View (if enabled and plot has an assigned status)
-  if (showPlotStatus && attrs['data-plot-id']) {
-    const plot = plots?.find(p => p.id === parseInt(attrs['data-plot-id']));
-    if (plot && plot.statusId) {
-      const status = statuses?.find(s => s.id === plot.statusId);
-      if (status && status.fillColor) {
-        return status.fillColor; // Return Status Color
-      }
-    }
-  }
-
-  // 2. Manual Custom Fill
-  if (attrs['data-cad-custom-fill'] === 'true') {
-    return attrs.fill;
-  }
-
-  // 3. Original CAD Fill
-  const originalFill = attrs['data-original-fill'];
-  if (originalFill) {
-    return originalFill === 'MISSING' ? null : originalFill;
-  }
-
-  // 4. Fallback for untouched shapes
-  return attrs.fill || null;
-}
+import { resolvePlotFill } from '../../shared/appearance/appearanceResolver';
 
 const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onPointerDown, plots, statuses, showPlotStatus, readOnly }) {
   if (!shape) return null;
@@ -84,7 +56,7 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
   }
 
   // Selection Highlight
-  if (isSelected && (Tag === 'path' || Tag === 'polygon' || Tag === 'rect' || Tag === 'circle' || Tag === 'polyline')) {
+  if (isSelected && (Tag === 'path' || Tag === 'polygon' || Tag === 'rect' || Tag === 'circle' || Tag === 'polyline' || Tag === 'line')) {
     reactAttrs.stroke = 'white';
     reactAttrs.strokeWidth = '3';
     reactAttrs.filter = 'drop-shadow(0 0 4px rgba(255,255,255,0.8))';

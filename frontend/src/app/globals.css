@@ -60,3 +60,11 @@ body {
 .duration-200 {
   animation-duration: 200ms;
 }
+
+/* ── Viewer: suppress the canvas grid that lives inside CadEditorCanvas ──────
+   The viewer renders its own static grid on the outer container so the grid
+   never moves during pan/zoom. This rule removes the grid that CadEditorCanvas
+   adds to its own containerRef when the viewer wraps it.                       */
+.viewer-canvas-no-grid [data-tool] {
+  background-image: none !important;
+}
