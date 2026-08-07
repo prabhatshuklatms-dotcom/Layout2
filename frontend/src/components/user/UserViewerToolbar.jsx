@@ -65,7 +65,7 @@ export default function UserViewerToolbar({
 
   useEffect(() => {
     if (project?.id) {
-      getProjectPlotStatuses(project.id)
+      getProjectPlotStatuses(project.id, { pagination: false })
         .then(data => {
           if (data && Array.isArray(data)) {
             setPlotStatuses(data);

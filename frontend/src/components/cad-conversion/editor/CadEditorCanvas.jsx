@@ -6,6 +6,7 @@ import { findHitsForShape, applyVectorErase, applyPartialDelete, generateHighlig
 import { createAmenityPlacement, updateAmenityPlacement, deleteAmenityPlacement } from '@/lib/api';
 import AmenitiesOverlay from './AmenitiesOverlay';
 import SelectedPlotGeometryOverlay from './SelectedPlotGeometryOverlay';
+import usePlotRevealAnimation from '@/hooks/usePlotRevealAnimation';
 
 const ZOOM_LEVELS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 8, 16, 32, 64];
 
@@ -690,6 +691,10 @@ export default function CadEditorCanvas({
   const [veModified, setVeModified] = useState(false);
   const [pendingVeSave, setPendingVeSave] = useState(false);
 
+  // Status Reveal WAAPI Hook
+  const layoutRevealKey = projectId && conversionId ? `${projectId}:${conversionId}` : '';
+  usePlotRevealAnimation(svgRef, documentState.shapes, layoutRevealKey);
+
   // Sync zoom/coords throttled
   const notifyChanges = () => {
     onZoomChange(transform.current.scale * 100);
@@ -804,17 +809,22 @@ export default function CadEditorCanvas({
 
   useEffect(() => {
     const handleFitScreen = () => fitToScreen();
-    const handleZoomIn = () => setScale(transform.current.scale * 1.25);
-    const handleZoomOut = () => setScale(transform.current.scale / 1.25);
-    
-    window.addEventListener('editor-fit-screen', handleFitScreen);
-    window.addEventListener('editor-zoom-in', handleZoomIn);
-    window.addEventListener('editor-zoom-out', handleZoomOut);
-    
+    const handleZoomIn    = () => setScale(transform.current.scale * 1.25);
+    const handleZoomOut   = () => setScale(transform.current.scale / 1.25);
+    // Fired by the viewer when the user wants to clear selection (e.g. clicking
+    // empty canvas space from UserLayoutViewer context).
+    const handleDeselect  = () => setSelectedShapeIds([]);
+
+    window.addEventListener('editor-fit-screen',    handleFitScreen);
+    window.addEventListener('editor-zoom-in',       handleZoomIn);
+    window.addEventListener('editor-zoom-out',      handleZoomOut);
+    window.addEventListener('viewer-deselect-plot', handleDeselect);
+
     return () => {
-      window.removeEventListener('editor-fit-screen', handleFitScreen);
-      window.removeEventListener('editor-zoom-in', handleZoomIn);
-      window.removeEventListener('editor-zoom-out', handleZoomOut);
+      window.removeEventListener('editor-fit-screen',    handleFitScreen);
+      window.removeEventListener('editor-zoom-in',       handleZoomIn);
+      window.removeEventListener('editor-zoom-out',      handleZoomOut);
+      window.removeEventListener('viewer-deselect-plot', handleDeselect);
     };
   }, [fitToScreen]);
 
@@ -1341,8 +1351,26 @@ export default function CadEditorCanvas({
       if (selectedShapeIds.length > 0) setSelectedShapeIds([]);
       const internalCoords = getSvgInternalCoords(e.clientX, e.clientY);
       if (internalCoords) {
-        setDrawPoints(prev => [...prev, internalCoords]);
-        setCurrentDrawCoords(internalCoords);
+        if (e.detail === 2) {
+          // Finish polygon on double-click
+          if (drawPoints.length > 1) {
+            commitDrawingPolygon(drawPoints);
+            setDrawPoints([]);
+            setCurrentDrawCoords(null);
+          }
+        } else {
+          setDrawPoints(prev => {
+            // Prevent duplicate points from the first click of a double click or accidental fast clicks
+            if (prev.length > 0) {
+              const lastPt = prev[prev.length - 1];
+              if (Math.abs(lastPt.x - internalCoords.x) < 0.001 && Math.abs(lastPt.y - internalCoords.y) < 0.001) {
+                return prev;
+              }
+            }
+            return [...prev, internalCoords];
+          });
+          setCurrentDrawCoords(internalCoords);
+        }
       }
       e.stopPropagation();
       e.preventDefault();
@@ -2063,26 +2091,45 @@ export default function CadEditorCanvas({
   // specific SVG element by ID in CSS without touching the React render tree.
   const focusModeCSS = focusedId
     ? `
-      /* ── Focus Mode: dim everything, then re-brighten the selected plot ── */
+      /* ── Focus Mode: dim all top-level SVG children ───────────────────── */
       .cad-svg-container.focus-active svg > * {
-        opacity: 0.3;
-        transition: opacity 180ms ease, fill 180ms ease;
+        opacity: 0.25;
+        transition: opacity 200ms ease;
       }
-      /* The focused plot shape — keep at full opacity */
+
+      /* ── Selected plot shape — full brightness ─────────────────────────── */
       .cad-svg-container.focus-active svg #${CSS.escape(focusedId)} {
         opacity: 1 !important;
-        transition: opacity 180ms ease, fill 180ms ease;
+        transition: opacity 200ms ease;
       }
-      /* The label belonging to the focused plot */
+
+      /* ── Label overlay: lift back to 1 so child rules work at face value ─ */
+      /* (SVG opacity is multiplicative: parent 0.25 × child 1 = 0.25 shown)  */
+      .cad-svg-container.focus-active svg #plot-labels-overlay {
+        opacity: 1 !important;
+      }
+      /* Dim every label group inside the overlay individually */
+      .cad-svg-container.focus-active svg #plot-labels-overlay > g {
+        opacity: 0.25;
+        transition: opacity 200ms ease;
+      }
+      /* Re-brighten only the label that belongs to the selected plot */
       .cad-svg-container.focus-active svg #plot-labels-overlay g[data-label-for="${CSS.escape(focusedId)}"] {
         opacity: 1 !important;
-        transition: opacity 180ms ease;
+        transition: opacity 200ms ease;
+      }
+
+      /* ── Dimension / geometry overlay for the selected plot ────────────── */
+      /* This overlay only exists while a plot is selected, so it is always   */
+      /* correct — lift it out of the blanket dim.                             */
+      .cad-svg-container.focus-active svg #selected-plot-geometry-overlay {
+        opacity: 1 !important;
       }
     `
     : `
       /* ── Focus Mode off: restore all elements ── */
       .cad-svg-container svg > * {
-        transition: opacity 180ms ease, fill 180ms ease;
+        transition: opacity 200ms ease;
       }
     `;
 

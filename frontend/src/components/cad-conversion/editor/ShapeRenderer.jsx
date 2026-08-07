@@ -1,14 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { resolvePlotFill } from '../../shared/appearance/appearanceResolver';
 
 const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onPointerDown, plots, statuses, showPlotStatus, readOnly }) {
   if (!shape) return null;
   if (shape.id === 'composite-plot-labels' || shape.id === 'composite-amenities') return null;
 
-  // We must apply the rawTransform if it exists, or serialize the transform object
-  let transformStr = shape.rawTransform;
+  let transformStr = shape.rawTransform || '';
 
-  // Render children if it's a group
   const children = (shape.children || []).map((child, index) => (
     <ShapeRenderer 
       key={`${child.id}-${index}`} 
@@ -24,17 +22,12 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
 
   const Tag = shape.type;
 
-  // Ensure interactive shapes have pointer-events-auto if they are top level, 
-  // but we usually handle selection at the CadEditorCanvas level via event delegation,
-  // OR we can attach onPointerDown directly here!
-  
   const handlePointerDown = (e) => {
     if (onPointerDown) {
       onPointerDown(e, shape.id);
     }
   };
 
-  // Convert kebab-case to camelCase for React rendering
   const reactAttrs = {};
   for (const [key, value] of Object.entries(shape.attributes)) {
     if (key.includes('-') && !key.startsWith('data-') && !key.startsWith('aria-')) {
@@ -47,24 +40,32 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
     }
   }
 
-  // Dynamic Plot Fill Override
   const resolvedFill = resolvePlotFill(shape, plots, statuses, showPlotStatus);
+
   if (resolvedFill !== null) {
     reactAttrs.fill = resolvedFill;
   } else if ('fill' in reactAttrs) {
     delete reactAttrs.fill;
   }
 
-  // Selection Highlight
+  if (shape.id === 'cad-plot-41' || shape.attributes['data-plot-id'] === '41' || shape.attributes['data-plot-id'] === '6') {
+    setTimeout(() => {
+      const el = document.getElementById(shape.id);
+      if (el) {
+        console.log("[STATUS TRACE] DOM fill attribute =", el.getAttribute('fill'));
+        console.log("[STATUS TRACE] DOM inline fill =", el.style.fill);
+        console.log("[STATUS TRACE] DOM computed fill =", getComputedStyle(el).fill);
+      }
+    }, 50);
+  }
+
   if (isSelected && (Tag === 'path' || Tag === 'polygon' || Tag === 'rect' || Tag === 'circle' || Tag === 'polyline' || Tag === 'line')) {
     reactAttrs.stroke = 'white';
     reactAttrs.strokeWidth = '3';
     reactAttrs.filter = 'drop-shadow(0 0 4px rgba(255,255,255,0.8))';
     reactAttrs.paintOrder = 'stroke fill markers';
-    reactAttrs.vectorEffect = 'non-scaling-stroke'; // Keep the border consistent regardless of zoom
+    reactAttrs.vectorEffect = 'non-scaling-stroke';
   }
-
-
 
   if (Tag === 'g' || Tag === 'defs' || Tag === 'clipPath' || Tag === 'pattern') {
     return (

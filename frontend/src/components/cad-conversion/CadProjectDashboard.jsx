@@ -138,7 +138,7 @@ export default function CadProjectDashboard({ projectId }) {
                 <p className="text-xs text-zinc-400 mt-1">Manage plots and plot numbers for this project.</p>
               </div>
               <Link 
-                href={`/cad-conversion/${projectId}/plots`}
+                href={`/cad-conversion/${projectId}/manage-plot`}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded shadow transition-colors"
               >
                 Plots

@@ -11,11 +11,11 @@ export class CadProjectsService {
         name: data.name,
         plotStatuses: {
           create: [
-            { name: 'Available', fillColor: '#22c55e', displayOrder: 1 },
-            { name: 'Sold', fillColor: '#ef4444', displayOrder: 2 },
-            { name: 'Reserved', fillColor: '#f97316', displayOrder: 3 },
-            { name: 'Booked', fillColor: '#3b82f6', displayOrder: 4 },
-            { name: 'Hold', fillColor: '#6b7280', displayOrder: 5 },
+            { name: 'Available', fillColor: '#22c55e' },
+            { name: 'Sold', fillColor: '#ef4444' },
+            { name: 'Reserved', fillColor: '#f97316' },
+            { name: 'Booked', fillColor: '#3b82f6' },
+            { name: 'Hold', fillColor: '#6b7280' },
           ]
         }
       }

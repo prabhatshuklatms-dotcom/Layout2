@@ -224,7 +224,7 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
     
     // Load Amenities
     Promise.all([
-      getAmenities(),
+      getAmenities({ pagination: false }),
       getAmenityPlacements(conversionId)
     ])
     .then(([amenities, placements]) => {
@@ -234,7 +234,7 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
     .catch(console.error);
 
     if (projectId) {
-      Promise.all([getCadProject(projectId), getProjectPlots(projectId), getProjectPlotStatuses(projectId)])
+      Promise.all([getCadProject(projectId), getProjectPlots(projectId, { pagination: false }), getProjectPlotStatuses(projectId, { pagination: false })])
         .then(([proj, p, s]) => {
           setProjectConfig(proj);
           setPlots(p);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getContrastYIQ } from '@/lib/utils';
 import Link from 'next/link';
 import { ColorPicker } from 'antd';
+import { Plus } from 'lucide-react';
 
 const STROKE_SUPPORTED_TYPES = new Set([
   'line', 'polyline', 'path', 'rect', 'circle', 'ellipse', 'polygon',
@@ -74,7 +75,7 @@ export default function CadEditorSidebar({ projectId, conversion, coords, active
       <div className="p-4 border-b border-zinc-800 flex flex-col gap-2">
         <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Actions</h3>
         <Link 
-          href={`/cad-conversion/${projectId}/plots${conversion ? `?editorId=${conversion.id}` : ''}`}
+          href={`/cad-conversion/${projectId}/manage-plot${conversion ? `?editorId=${conversion.id}` : ''}`}
           className="w-full flex items-center justify-center py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded transition-colors"
         >
           Manage Plots
@@ -89,7 +90,18 @@ export default function CadEditorSidebar({ projectId, conversion, coords, active
 
       {/* ── Amenities ─────────────────────────────────────────────────────── */}
       <div className="p-4 border-b border-zinc-800 flex flex-col shrink-0 max-h-[300px]">
-        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3 shrink-0">Amenities</h3>
+        <div className="flex items-center justify-between mb-3 shrink-0">
+          <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Amenities</h3>
+          <a
+            href="/masters/amenities"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-500 hover:text-indigo-400 transition-colors"
+            title="Add Amenity"
+          >
+            <Plus size={14} />
+          </a>
+        </div>
         <div className="grid grid-cols-3 gap-2 overflow-y-auto pr-1">
           {masterAmenities.map(am => (
             <div 

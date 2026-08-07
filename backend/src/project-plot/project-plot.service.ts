@@ -72,12 +72,50 @@ export class ProjectPlotService {
     });
   }
 
-  findAllByProject(projectId: number) {
-    return this.prisma.projectPlot.findMany({
-      where: { projectId },
+  async findAllByProject(projectId: number, pageStr?: string, limitStr?: string, search?: string, paginationStr?: string) {
+    const pagination = paginationStr === 'false' ? false : true;
+    const page = Math.max(1, parseInt(pageStr || '1', 10) || 1);
+    const limit = Math.max(1, parseInt(limitStr || '10', 10) || 10);
+    const skip = (page - 1) * limit;
+
+    let where: any = { projectId };
+    if (search && search.trim()) {
+      where = {
+        ...where,
+        plotNumber: { contains: search.trim(), mode: 'insensitive' }
+      };
+    }
+
+    if (pagination === false) {
+      const [total, data] = await Promise.all([
+        this.prisma.projectPlot.count({ where }),
+        this.prisma.projectPlot.findMany({
+          where,
+          include: { status: true },
+          orderBy: { plotNumber: 'asc' },
+        })
+      ]);
+      return { data, total };
+    }
+
+    const total = await this.prisma.projectPlot.count({ where });
+    const data = await this.prisma.projectPlot.findMany({
+      where,
       include: { status: true },
       orderBy: { plotNumber: 'asc' },
+      skip,
+      take: limit,
     });
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
   }
 
   async findOne(id: number) {

@@ -30,8 +30,8 @@ export default function UserProjectMap({ projectId }) {
           getCadProject(projectId),
           getProjectBoundaries(projectId),
           getCadConversions(projectId),
-          getProjectPlots(projectId),
-          getProjectPlotStatuses(projectId)
+          getProjectPlots(projectId, { pagination: false }),
+          getProjectPlotStatuses(projectId, { pagination: false })
         ]);
         
         setProject(projectData);
@@ -144,6 +144,7 @@ export default function UserProjectMap({ projectId }) {
             plots={plots}
             statuses={statuses}
             showPlotStatus={showPlotStatus}
+            projectConfig={project}
             className="w-full h-full"
           />
         ) : (

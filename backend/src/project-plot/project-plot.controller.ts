@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Logger, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Logger, BadRequestException, Query } from '@nestjs/common';
 import { ProjectPlotService } from './project-plot.service';
 import { CreateProjectPlotDto } from './dto/create-project-plot.dto';
 import { UpdateProjectPlotDto } from './dto/update-project-plot.dto';
@@ -30,8 +30,14 @@ export class ProjectPlotController {
   }
 
   @Get()
-  findAll(@Param('projectId') projectId: string) {
-    return this.projectPlotService.findAllByProject(+projectId);
+  findAll(
+    @Param('projectId') projectId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('pagination') pagination?: string
+  ) {
+    return this.projectPlotService.findAllByProject(+projectId, page, limit, search, pagination);
   }
 
   @Get(':id')

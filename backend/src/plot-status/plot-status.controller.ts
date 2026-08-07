@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe, Query } from '@nestjs/common';
 import { PlotStatusService } from './plot-status.service';
 
 @Controller('api/plot-statuses')
@@ -13,8 +13,19 @@ export class PlotStatusController {
   // --- Project Specific Routes ---
 
   @Get('project/:projectId')
-  findProjectStatuses(@Param('projectId', ParseIntPipe) projectId: number) {
-    return this.plotStatusService.findProjectStatuses(projectId);
+  findProjectStatuses(
+    @Param('projectId', ParseIntPipe) projectId: number,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('pagination') pagination?: string
+  ) {
+    return this.plotStatusService.findProjectStatusesPaginated(projectId, {
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 10,
+      search,
+      pagination: pagination === 'false' ? false : true
+    });
   }
 
   @Post('project/:projectId')

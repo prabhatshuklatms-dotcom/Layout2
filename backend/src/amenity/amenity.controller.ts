@@ -83,8 +83,16 @@ export class AmenityController {
   }
 
   @Get()
-  findAll() {
-    return this.amenityService.findAll();
+  findAll(
+    @Req() req: any
+  ) {
+    const { page, limit, search, pagination } = req.query;
+    return this.amenityService.findAllPaginated({
+      page: page ? parseInt(page as string) : 1,
+      limit: limit ? parseInt(limit as string) : 10,
+      search: search as string,
+      pagination: pagination === 'false' ? false : true
+    });
   }
 
   @Get(':id')

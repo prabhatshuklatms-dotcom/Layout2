@@ -34,7 +34,8 @@ const LeafletMap = forwardRef(function LeafletMap(
     boundaries, activeBoundaryId, currentColor,
     onDrawComplete, onSelectBoundary, onMoveComplete,
     initialBounds, staticPreview, onLayoutDrop,
-    layouts, onLayoutUpdate, plots, statuses, showPlotStatus
+    layouts, onLayoutUpdate, plots, statuses, showPlotStatus,
+    projectConfig
   },
   ref,
 ) {
@@ -395,9 +396,25 @@ const LeafletMap = forwardRef(function LeafletMap(
     map.getContainer().style.cursor = 'crosshair';
 
     // ── Polygon ──────────────────────────────────────────────────────────
+    // Disable double-click zoom while in polygon draw mode
+    if (drawMode === BOUNDARY_DRAW_MODE.POLYGON) {
+      map.doubleClickZoom.disable();
+    }
+
     function onPolyClick(e) {
       if (drawMode !== BOUNDARY_DRAW_MODE.POLYGON) return;
       e.originalEvent?.stopPropagation();
+
+      // Prevent duplicate points from the second click of a double-click
+      const pts = drawPtsRef.current;
+      if (pts.length > 0) {
+        const lastPt = pts[pts.length - 1];
+        // ~1 meter tolerance to catch the second click even with slight mouse drift
+        if (Math.abs(lastPt[0] - e.latlng.lat) < 0.00001 && Math.abs(lastPt[1] - e.latlng.lng) < 0.00001) {
+          return;
+        }
+      }
+
       isDrawing.current = true;
       const pt = [e.latlng.lat, e.latlng.lng];
       drawPtsRef.current.push(pt);
@@ -501,7 +518,12 @@ const LeafletMap = forwardRef(function LeafletMap(
       map.off('mouseup',   onMouseUp);
       window.removeEventListener('keydown', onKeyDown);
       cleanupDraw(map, Lf);
-      if (map.getContainer()) map.getContainer().style.cursor = '';
+      if (map.getContainer()) {
+        map.getContainer().style.cursor = '';
+      }
+      if (map.doubleClickZoom) {
+        map.doubleClickZoom.enable();
+      }
     };
   }, [drawingBoundary, drawMode, currentColor, onDrawComplete]);
 
@@ -650,6 +672,7 @@ const LeafletMap = forwardRef(function LeafletMap(
             plots={plots}
             statuses={statuses}
             showPlotStatus={showPlotStatus}
+            projectConfig={projectConfig}
             isSelected={selectedLayoutId === layout.id}
             onSelect={() => setSelectedLayoutId(layout.id)}
             onTransformChange={(newDraft) => {

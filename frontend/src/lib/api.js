@@ -87,8 +87,23 @@ export async function updateCadConversion(id, data) {
 
 
 // ─── Project Plots ────────────────────────────────────────────────────────
-export async function getProjectPlots(projectId) {
-  return request(`/api/projects/${projectId}/plots`);
+export async function getProjectPlots(projectId, options = {}) {
+  const params = new URLSearchParams();
+  if (options.pagination === false) {
+    params.append('pagination', 'false');
+  } else {
+    if (options.page) params.append('page', options.page);
+    if (options.limit) params.append('limit', options.limit);
+  }
+  if (options.search) params.append('search', options.search);
+  
+  const queryString = params.toString();
+  const url = `/api/projects/${projectId}/plots${queryString ? `?${queryString}` : ''}`;
+  return request(url).then(res => options.pagination === false && res.data ? res.data : res);
+}
+
+export async function getProjectPlot(plotId) {
+  return request(`/api/projects/ignore/plots/${plotId}`);
 }
 
 export async function createProjectPlot(projectId, body) {
@@ -124,8 +139,22 @@ export async function deleteProjectPlot(projectId, plotId) {
 }
 
 // ─── Amenities ────────────────────────────────────────────────────────────
-export async function getAmenities() {
-  return request('/api/amenities');
+export async function getAmenities(options = {}) {
+  const query = new URLSearchParams();
+  if (options.pagination === false) {
+    query.append('pagination', 'false');
+  } else {
+    if (options.page) query.append('page', options.page.toString());
+    if (options.limit) query.append('limit', options.limit.toString());
+  }
+  if (options.search) query.append('search', options.search);
+  
+  const queryString = query.toString();
+  return request(`/api/amenities${queryString ? `?${queryString}` : ''}`).then(res => options.pagination === false && res.data ? res.data : res);
+}
+
+export async function getAmenity(id) {
+  return request(`/api/amenities/${id}`);
 }
 
 export async function createAmenity(body) {
@@ -185,8 +214,23 @@ export async function deleteAmenityPlacement(id) {
 }
 
 // ─── Project Plot Statuses ──────────────────────────────────────────────────────────
-export async function getProjectPlotStatuses(projectId) {
-  return request(`/api/plot-statuses/project/${projectId}`);
+export async function getProjectPlotStatuses(projectId, params = {}) {
+  const query = new URLSearchParams();
+  if (params.pagination === false) {
+    query.append('pagination', 'false');
+  } else {
+    if (params.page) query.append('page', params.page);
+    if (params.limit) query.append('limit', params.limit);
+  }
+  if (params.search) query.append('search', params.search);
+  const queryString = query.toString();
+  
+  const url = `/api/plot-statuses/project/${projectId}${queryString ? `?${queryString}` : ''}`;
+  return request(url).then(res => params.pagination === false && res.data ? res.data : res);
+}
+
+export async function getPlotStatus(id) {
+  return request(`/api/plot-statuses/${id}`);
 }
 
 export async function createProjectPlotStatus(projectId, body) {

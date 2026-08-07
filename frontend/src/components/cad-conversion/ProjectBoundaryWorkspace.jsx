@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 import { MapPin, ArrowLeft, Save, Trash2, Undo, Redo, Maximize, MousePointer2, Hexagon, Loader2, Edit2, Layers, Eye, EyeOff } from 'lucide-react';
 import area from '@turf/area';
 import { polygon as turfPolygon } from '@turf/helpers';
-import { getProjectBoundaries, createProjectBoundary, updateProjectBoundary, deleteProjectBoundary, getCadConversions, updateCadConversion, getProjectPlots } from '@/lib/api';
+import { getProjectBoundaries, createProjectBoundary, updateProjectBoundary, deleteProjectBoundary, getCadConversions, updateCadConversion, getProjectPlots, getCadProject } from '@/lib/api';
 import Swal from 'sweetalert2';
 
 const LeafletMap = dynamic(() => import('@/components/map/LeafletMap'), { ssr: false });
@@ -46,6 +46,7 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
 
   const [layouts, setLayouts] = useState([]);
   const [plots, setPlots] = useState([]);
+  const [projectConfig, setProjectConfig] = useState(null);
   useEffect(() => {
     if (projectId) {
       // Fetch boundaries and conversions independently so one failure
@@ -78,9 +79,13 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
         })
         .catch((err) => console.error("Failed to load CAD conversions:", err));
         
-      getProjectPlots(projectId)
+      getProjectPlots(projectId, { pagination: false })
         .then((data) => setPlots(data || []))
         .catch((err) => console.error("Failed to load plots:", err));
+
+      getCadProject(projectId)
+        .then((data) => setProjectConfig(data || null))
+        .catch((err) => console.error("Failed to load project config:", err));
     }
   }, [projectId, pushHistory]);
 
@@ -501,6 +506,7 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
               initialBounds={boundary?.latMin ? [[boundary.latMin, boundary.lngMin], [boundary.latMax, boundary.lngMax]] : null}
               layouts={layouts}
               plots={plots}
+              projectConfig={projectConfig}
               onLayoutDrop={handleLayoutDrop}
               onLayoutUpdate={handleLayoutUpdate}
               className="w-full h-full"

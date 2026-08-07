@@ -88,7 +88,6 @@ model Amenity {
   name        String   @unique
   category    String
   iconPath        String
-  description     String?
   defaultWidth    Float?
   defaultHeight   Float?
   defaultRotation Float?
@@ -104,8 +103,6 @@ model PlotStatus {
   name         String
   fillColor    String
   isActive     Boolean       @default(true)
-  displayOrder Int           @default(0)
-  description  String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   plots        ProjectPlot[]
@@ -125,7 +122,6 @@ model ProjectPlot {
   areaSqMeter Float?
   statusId    Int?
   status      PlotStatus? @relation(fields: [statusId], references: [id])
-  description String?
   remarks     String?
   cadRegionId   String? // To link with specific regions in the CAD editor SVG
   conversionId  Int?

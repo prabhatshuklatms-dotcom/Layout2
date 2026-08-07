@@ -36,11 +36,44 @@ export class PlotStatusService {
 
   // --- Project Specific Methods ---
 
-  async findProjectStatuses(projectId: number) {
-    return this.prisma.plotStatus.findMany({
-      where: { projectId },
-      orderBy: { displayOrder: 'asc' },
-    });
+  async findProjectStatusesPaginated(projectId: number, params: { page?: number, limit?: number, search?: string, pagination?: boolean }) {
+    const { page = 1, limit = 10, search, pagination = true } = params;
+    
+    const where: any = { projectId };
+    if (search) {
+      where.name = { contains: search, mode: 'insensitive' };
+    }
+
+    if (pagination === false) {
+      const [total, data] = await Promise.all([
+        this.prisma.plotStatus.count({ where }),
+        this.prisma.plotStatus.findMany({
+          where,
+          orderBy: { id: 'asc' },
+        })
+      ]);
+      return { data, total };
+    }
+
+    const [total, data] = await Promise.all([
+      this.prisma.plotStatus.count({ where }),
+      this.prisma.plotStatus.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { id: 'asc' },
+      })
+    ]);
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
   }
 
   async createProjectStatus(projectId: number, data: any) {

@@ -3,6 +3,39 @@ import { createPortal } from 'react-dom';
 import L from 'leaflet';
 import { BASE_URL } from '@/lib/api';
 import { resolvePlotFill } from '../shared/appearance/appearanceResolver';
+import PlotLabelsOverlay from '../shared/appearance/PlotLabelsOverlay';
+
+// Strip a top-level <g id="..."> group from an SVG string by id.
+// This is used to remove the baked-in composite-plot-labels / composite-amenities
+// groups so they are never rendered — we replace them with live React overlays.
+function stripGroupById(svgString, id) {
+  // Match <g ... id="<id>"...>...</g> including nested elements.
+  // We do a bracket-depth scan so we don't need a full XML parser.
+  const openTag = new RegExp(`<g\\b[^>]*\\bid="${id}"[^>]*>`, 'i');
+  const match = openTag.exec(svgString);
+  if (!match) return svgString;
+
+  const start = match.index;
+  let depth = 1;
+  let i = start + match[0].length;
+
+  while (i < svgString.length && depth > 0) {
+    const nextOpen  = svgString.indexOf('<g', i);
+    const nextClose = svgString.indexOf('</g>', i);
+
+    if (nextClose === -1) break; // malformed — bail out
+
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      depth++;
+      i = nextOpen + 2;
+    } else {
+      depth--;
+      i = nextClose + 4;
+    }
+  }
+
+  return svgString.slice(0, start) + svgString.slice(i);
+}
 
 export default function LayoutTransformNode({ 
   layout, 
@@ -13,7 +46,8 @@ export default function LayoutTransformNode({
   onTransformEnd,
   plots,
   statuses,
-  showPlotStatus
+  showPlotStatus,
+  projectConfig
 }) {
   const [imgSize, setImgSize] = useState(null);
   const [svgUrl, setSvgUrl] = useState(null);
@@ -24,6 +58,8 @@ export default function LayoutTransformNode({
   const [portalNode, setPortalNode] = useState(null);
   const layerRef = useRef(null);
   const svgContainerRef = useRef(null);
+  // ref forwarded into PlotLabelsOverlay so it can query plot elements
+  const svgOverlayRef = useRef(null);
   
   // Dynamic fill syncing
   useEffect(() => {
@@ -95,7 +131,12 @@ export default function LayoutTransformNode({
         } else {
           cleanSvgStr = cleanSvgStr.replace(/width="[^"]+"/, 'width="100%"').replace(/height="[^"]+"/, 'height="100%"');
         }
-        setSvgRaw(cleanSvgStr);
+        // Strip baked label / amenity groups so the live React overlay is the
+        // single source of truth — matching the editor's PlotLabelsOverlay exactly.
+        let displaySvgStr = cleanSvgStr;
+        displaySvgStr = stripGroupById(displaySvgStr, 'composite-plot-labels');
+        displaySvgStr = stripGroupById(displaySvgStr, 'composite-amenities');
+        setSvgRaw(displaySvgStr);
         if (data.interactionPolygon) {
           setInteractionPolygon(data.interactionPolygon);
           if (data.interactionPolygon.viewBox) {
@@ -474,6 +515,23 @@ export default function LayoutTransformNode({
         dangerouslySetInnerHTML={{ __html: svgRaw }}
         style={{ width: '100%', height: '100%', opacity: 0.85, pointerEvents: 'none', position: 'absolute', top: 0, left: 0 }} 
       />
+      {/* Live labels overlay — same component as the editor, reads plot DOM from svgContainerRef */}
+      {plots && plots.length > 0 && svgRaw && (
+        <svg
+          ref={svgOverlayRef}
+          viewBox={imgSize ? `0 0 ${imgSize.w} ${imgSize.h}` : undefined}
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}
+        >
+          <PlotLabelsOverlay
+            svgRef={svgContainerRef}
+            plots={plots}
+            onLabelDragEnd={null}
+            readOnly={true}
+            selectedShapeIds={[]}
+            projectConfig={projectConfig}
+          />
+        </svg>
+      )}
       <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
         <polygon 
           points={polygonPoints} 
