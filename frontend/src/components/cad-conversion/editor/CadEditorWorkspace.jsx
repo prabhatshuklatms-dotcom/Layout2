@@ -6,7 +6,7 @@ import CadEditorToolbar from './CadEditorToolbar';
 import CadEditorCanvas from './CadEditorCanvas';
 import CadEditorSidebar from './CadEditorSidebar';
 import { parseSvgStringToState, serializeStateToSvgString } from './SvgDocumentModel';
-import { getProjectPlots, getPlotStatuses, getProjectPlotStatuses, getAmenities, getAmenityPlacements, updateProjectPlotAssignment, getCadProject, updateCadProject } from '@/lib/api';
+import { getProjectPlots, getPlotStatuses, getProjectPlotStatuses, getAmenities, getAmenityPlacements, updateProjectPlotAssignment, getCadProject, updateCadProject, updateProjectPlot } from '@/lib/api';
 import Swal from 'sweetalert2';
 export default function CadEditorWorkspace({ conversionId, projectId, readOnly = false, showPlotStatus: showPlotStatusProp, onUserViewerSelection, onZoomChange: onZoomChangeProp }) {
   const [conversion, setConversion] = useState(null);
@@ -14,12 +14,16 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
   const [svgContent, setSvgContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTool, setActiveTool] = useState('pointer');
+  const [activeTool, setActiveTool] = useState('zoom_window');
   const [isSaving, setIsSaving] = useState(false);
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [fillColor, setFillColor] = useState('#3b82f6');
-  const [fillOpacity, setFillOpacity] = useState(1.0);
+  const [fillOpacity, setFillOpacity] = useState(1);
+  const [strokeColor, setStrokeColor] = useState('#ffffff');
   const [eraserSize, setEraserSize] = useState(1);
+  const [textFontSize, setTextFontSize] = useState(2);
+  const [textFontColor, setTextFontColor] = useState('#ffffff');
+  const [textFontFamily, setTextFontFamily] = useState('sans-serif');
 
   // Canvas state synced to TopBar and Sidebar
   const [zoomPercent, setZoomPercent] = useState(100);
@@ -41,6 +45,19 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
 
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Mobile sidebar state
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsMobileSidebarOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const performSave = async (content) => {
     try {
@@ -124,15 +141,21 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
     if (svgContent) performSave(svgContent);
   };
 
-  // Stroke-width change from Sidebar → canvas via custom event
-  const handleShapeStrokeWidthChange = (w) => {
+  // Update an attribute for selected shapes (and local state)
+  const handleShapeAttributeChange = (attrName, value, setStateFn) => {
+    setStateFn(value);
     if (selectedShapeIds.length === 0) return;
+    
     const updateShapes = (shapes) => {
       let changed = false;
       const result = shapes.map(s => {
         if (selectedShapeIds.includes(s.id)) {
           changed = true;
-          return { ...s, attributes: { ...s.attributes, 'stroke-width': w } };
+          const newAttributes = { ...s.attributes, [attrName]: value };
+          if (attrName === 'stroke' || attrName === 'fill') {
+            newAttributes['data-custom-color'] = 'true';
+          }
+          return { ...s, attributes: newAttributes };
         }
         if (s.children) {
           const { newShapes, childChanged } = updateShapes(s.children);
@@ -160,9 +183,20 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
       return serializeStateToSvgString(newShapes, parsed.viewBox);
     });
     
-    // Update selectedShapes state to match new attributes
-    setSelectedShapes(prev => prev.map(s => ({ ...s, attributes: { ...s.attributes, 'stroke-width': w } })));
+    setSelectedShapes(prev => prev.map(s => {
+      const newAttributes = { ...s.attributes, [attrName]: value };
+      if (attrName === 'stroke' || attrName === 'fill') {
+        newAttributes['data-custom-color'] = 'true';
+      }
+      return { ...s, attributes: newAttributes };
+    }));
   };
+
+  const handleShapeStrokeWidthChange = (w) => handleShapeAttributeChange('stroke-width', w, setStrokeWidth);
+  const handleShapeStrokeColorChange = (c) => handleShapeAttributeChange('stroke', c, setStrokeColor);
+  const handleTextFontSizeChange = (w) => handleShapeAttributeChange('font-size', w, setTextFontSize);
+  const handleTextFontColorChange = (c) => handleShapeAttributeChange('fill', c, setTextFontColor);
+  const handleTextFontFamilyChange = (f) => handleShapeAttributeChange('font-family', f, setTextFontFamily);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -332,6 +366,30 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
     }
   };
 
+  const handlePlotLabelStyleChange = async (plotId, newStyles) => {
+    const plot = plots.find(p => p.id === plotId);
+    if (!plot) return;
+    const currentMetadata = plot.metadata || {};
+    const newMetadata = { ...currentMetadata, ...newStyles };
+    
+    setPlots(prev => prev.map(p => p.id === plotId ? { ...p, metadata: newMetadata } : p));
+    
+    try {
+      await updateProjectPlot(projectId, plotId, { metadata: newMetadata });
+    } catch (err) {
+      console.error('Failed to update plot label style:', err);
+      setPlots(prev => prev.map(p => p.id === plotId ? { ...p, metadata: currentMetadata } : p));
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="h-screen w-full bg-[#0a0a0a] flex items-center justify-center">
+        <div className="text-white animate-pulse">Loading Conversion...</div>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="h-screen w-full bg-[#0a0a0a] flex items-center justify-center text-red-500 flex-col gap-4">
@@ -362,9 +420,23 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
           canRedo={historyIndex < history.length - 1}
           activeTool={activeTool}
           strokeWidth={strokeWidth}
-          onStrokeWidthChange={setStrokeWidth}
+          onStrokeWidthChange={handleShapeStrokeWidthChange}
+          strokeColor={strokeColor}
+          onStrokeColorChange={handleShapeStrokeColorChange}
+          textFontSize={textFontSize}
+          onTextFontSizeChange={handleTextFontSizeChange}
+          textFontColor={textFontColor}
+          onTextFontColorChange={handleTextFontColorChange}
+          textFontFamily={textFontFamily}
+          onTextFontFamilyChange={handleTextFontFamilyChange}
+          selectedShapes={selectedShapes}
           showPlotStatus={showPlotStatus}
           onTogglePlotStatus={() => setInternalShowPlotStatus(!internalShowPlotStatus)}
+          isMobileSidebarOpen={isMobileSidebarOpen}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+          plots={plots}
+          projectConfig={projectConfig}
+          onPlotLabelStyleChange={handlePlotLabelStyleChange}
         />
       )}
 
@@ -380,16 +452,16 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
 
         <div 
           className="flex-1 relative overflow-hidden bg-[#0a0a0a] cad-viewer-global-styles"
-          style={{ '--layout-line-color': conversion?.layoutLineColor || '#ffffff' }}
+          style={{ '--layout-line-color': conversion?.layoutLineColor || '#ffffff', touchAction: 'none' }}
         >
           <style>{`
-            .cad-viewer-global-styles svg path:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-            .cad-viewer-global-styles svg line:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-            .cad-viewer-global-styles svg polyline:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-            .cad-viewer-global-styles svg polygon:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-            .cad-viewer-global-styles svg rect:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-            .cad-viewer-global-styles svg circle:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-            .cad-viewer-global-styles svg ellipse:not([stroke="none"]):not([stroke="transparent"]):not([filter]) {
+            .cad-viewer-global-styles svg path:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+            .cad-viewer-global-styles svg line:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+            .cad-viewer-global-styles svg polyline:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+            .cad-viewer-global-styles svg polygon:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+            .cad-viewer-global-styles svg rect:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+            .cad-viewer-global-styles svg circle:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+            .cad-viewer-global-styles svg ellipse:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]) {
               stroke: var(--layout-line-color) !important;
             }
           `}</style>
@@ -398,6 +470,10 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
             svgContent={svgContent}
             activeTool={activeTool}
             strokeWidth={strokeWidth}
+            strokeColor={strokeColor}
+            textFontSize={textFontSize}
+            textFontColor={textFontColor}
+            textFontFamily={textFontFamily}
             eraserSize={eraserSize}
             fillColor={fillColor}
             fillOpacity={fillOpacity}
@@ -471,6 +547,8 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
 
         {!readOnly && (
           <CadEditorSidebar
+            isMobileOpen={isMobileSidebarOpen}
+            onCloseMobile={() => setIsMobileSidebarOpen(false)}
             projectId={projectId}
             conversion={conversion}
             coords={coords}
@@ -484,6 +562,7 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
             masterAmenities={masterAmenities}
             projectConfig={projectConfig}
             onProjectLabelStyleChange={(newStyles) => setProjectConfig(prev => ({ ...prev, ...newStyles }))}
+            onPlotLabelStyleChange={handlePlotLabelStyleChange}
             onLayoutLineColorChange={handleLayoutLineColorChange}
             onFillColorChange={setFillColor}
             onFillOpacityChange={setFillOpacity}

@@ -35,9 +35,13 @@ export class ProjectPlotController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
-    @Query('pagination') pagination?: string
+    @Query('pagination') pagination?: string,
+    @Query('statusId') statusId?: string,
+    @Query('assignment') assignment?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
   ) {
-    return this.projectPlotService.findAllByProject(+projectId, page, limit, search, pagination);
+    return this.projectPlotService.findAllByProject(+projectId, page, limit, search, pagination, statusId, assignment, sortBy, sortOrder);
   }
 
   @Get(':id')

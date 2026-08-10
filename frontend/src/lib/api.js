@@ -96,6 +96,10 @@ export async function getProjectPlots(projectId, options = {}) {
     if (options.limit) params.append('limit', options.limit);
   }
   if (options.search) params.append('search', options.search);
+  if (options.statusId) params.append('statusId', options.statusId);
+  if (options.assignment) params.append('assignment', options.assignment);
+  if (options.sortBy) params.append('sortBy', options.sortBy);
+  if (options.sortOrder) params.append('sortOrder', options.sortOrder);
   
   const queryString = params.toString();
   const url = `/api/projects/${projectId}/plots${queryString ? `?${queryString}` : ''}`;

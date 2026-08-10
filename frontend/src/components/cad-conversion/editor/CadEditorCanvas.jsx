@@ -626,9 +626,14 @@ import PlotLabelsOverlay from '../../shared/appearance/PlotLabelsOverlay';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function CadEditorCanvas({
+  readOnly = false,
   svgContent,
   activeTool,
   strokeWidth = 2,
+  strokeColor = '#ffffff',
+  textFontSize = 2,
+  textFontColor = '#ffffff',
+  textFontFamily = 'sans-serif',
   eraserSize = 10,
   fillColor = '#3b82f6',
   fillOpacity = 1.0,
@@ -646,8 +651,7 @@ export default function CadEditorCanvas({
   masterAmenities = [],
   placedAmenities = [],
   setPlacedAmenities,
-  conversionId,
-  readOnly = false
+  conversionId
 }) {
   const containerRef = useRef(null);
   const contentRef = useRef(null);
@@ -801,9 +805,21 @@ export default function CadEditorCanvas({
 
   const fitToScreen = useCallback(() => {
     if (!containerRef.current || !svgRef.current) return;
-    transform.current.scale = 1;
-    transform.current.x = 0;
-    transform.current.y = 0;
+    
+    const isMobile = window.innerWidth < 768;
+    const newScale = isMobile ? 1.5 : 1;
+    
+    if (newScale === 1) {
+      transform.current.scale = 1;
+      transform.current.x = 0;
+      transform.current.y = 0;
+    } else {
+      const rect = containerRef.current.getBoundingClientRect();
+      transform.current.scale = newScale;
+      transform.current.x = (rect.width / 2) - ((rect.width / 2) * newScale);
+      transform.current.y = (rect.height / 2) - ((rect.height / 2) * newScale);
+    }
+    
     requestUpdate();
   }, []);
 
@@ -1015,6 +1031,9 @@ export default function CadEditorCanvas({
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+      const targetTag = e.target.tagName?.toLowerCase();
+      if (targetTag === 'input' || targetTag === 'textarea' || e.target.isContentEditable) return;
+
       if (e.code === 'Space' && !isSpaceDownRef.current) {
         setIsSpaceDown(true);
         isSpaceDownRef.current = true;
@@ -1790,7 +1809,7 @@ export default function CadEditorCanvas({
     const newShape = {
       id: shapeId,
       type: '',
-      attributes: { stroke: "#ffffff", "stroke-width": strokeWidth, fill: "none", "vector-effect": "non-scaling-stroke" },
+      attributes: { stroke: strokeColor, "stroke-width": strokeWidth, fill: "none", "vector-effect": "non-scaling-stroke", "data-custom-color": "true" },
       transform: { tx: 0, ty: 0, rot: 0, sx: 1, sy: 1 },
       children: []
     };
@@ -1830,7 +1849,7 @@ export default function CadEditorCanvas({
     const newShape = {
       id: shapeId,
       type: 'path',
-      attributes: { d: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`, stroke: "#ffffff", "stroke-width": strokeWidth, fill: "none", "vector-effect": "non-scaling-stroke" },
+      attributes: { d: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`, stroke: strokeColor, "stroke-width": strokeWidth, fill: "none", "vector-effect": "non-scaling-stroke", "data-custom-color": "true" },
       transform: { tx: 0, ty: 0, rot: 0, sx: 1, sy: 1 },
       children: []
     };
@@ -1854,7 +1873,7 @@ export default function CadEditorCanvas({
     const newShape = {
       id: shapeId,
       type: 'polyline',
-      attributes: { points: pointsStr, fill: "none", stroke: "#ffffff", "stroke-width": strokeWidth, "vector-effect": "non-scaling-stroke" },
+      attributes: { points: pointsStr, fill: "none", stroke: strokeColor, "stroke-width": strokeWidth, "vector-effect": "non-scaling-stroke", "data-custom-color": "true" },
       transform: { tx: 0, ty: 0, rot: 0, sx: 1, sy: 1 },
       children: []
     };
@@ -1890,7 +1909,7 @@ export default function CadEditorCanvas({
       id: shapeId,
       type: 'text',
       textContent: tInput.value,
-      attributes: { x: tInput.x, y: tInput.y, fill: "#ffffff", "font-size": strokeWidth, "font-family": "sans-serif" },
+      attributes: { x: tInput.x, y: tInput.y, "font-size": textFontSize, fill: textFontColor, "font-family": textFontFamily, "data-cad-type": "text" },
       transform: { tx: 0, ty: 0, rot: 0, sx: 1, sy: 1 },
       children: []
     };

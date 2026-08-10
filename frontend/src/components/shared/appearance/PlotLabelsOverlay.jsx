@@ -184,15 +184,20 @@ export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readO
         }
 
         const isSelected = selectedShapeIds?.includes(id);
-        const color = projectConfig?.labelFontColor || '#FFFFFF';
-        const fontFamily = projectConfig?.labelFontFamily || 'sans-serif';
+        const plotMetadata = plot.metadata || {};
+        const color = plotMetadata.labelFontColor || projectConfig?.labelFontColor || '#FFFFFF';
+        const fontFamily = plotMetadata.labelFontFamily || projectConfig?.labelFontFamily || 'sans-serif';
+        const strokeWidth = plotMetadata.labelStrokeWidth !== undefined && plotMetadata.labelStrokeWidth !== null ? parseFloat(plotMetadata.labelStrokeWidth) : 0;
+        const strokeColor = plotMetadata.labelFontColor || projectConfig?.labelFontColor || '#FFFFFF';
         const showArea = isSelected;
         const showWidth = false; // Dimensions are handled by geometry overlay
         const showHeight = false;
         const rotationAttr = 0;
         const alignAttr = 'middle';
 
-        let baseFontSize = projectConfig?.labelFontSize;
+        let baseFontSize = plotMetadata.labelFontSize !== undefined && plotMetadata.labelFontSize !== null
+          ? parseFloat(plotMetadata.labelFontSize)
+          : projectConfig?.labelFontSize;
         if (!baseFontSize || isNaN(baseFontSize)) baseFontSize = 2;
 
         let textX = 0;
@@ -258,6 +263,9 @@ export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readO
                 x={textX}
                 textAnchor={alignAttr}
                 fill={l.color}
+                stroke={strokeWidth > 0 ? strokeColor : "none"}
+                strokeWidth={strokeWidth}
+                strokeLinejoin="round"
                 fontSize={l.size}
                 fontFamily={fontFamily}
                 fontWeight="600"

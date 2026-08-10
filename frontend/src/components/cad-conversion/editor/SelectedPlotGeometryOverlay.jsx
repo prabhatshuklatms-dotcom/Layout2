@@ -58,10 +58,56 @@ function getSvgGeometry(svgEl, shapeId) {
       }
     } else if (tag === 'path') {
       const d = el.getAttribute('d') || '';
-      const regex = /([a-zA-Z])|([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)/g;
-      let tokens = [];
-      let match;
-      while ((match = regex.exec(d)) !== null) tokens.push(match[0]);
+      const rawTokens = [];
+      let currentTok = '';
+      for (let i = 0; i < d.length; i++) {
+        const c = d[i];
+        if (/[a-zA-Z]/.test(c)) {
+          if (currentTok) { rawTokens.push(currentTok); currentTok = ''; }
+          rawTokens.push(c);
+        } else if (/\s|,/.test(c)) {
+          if (currentTok) { rawTokens.push(currentTok); currentTok = ''; }
+        } else if (c === '-') {
+          if (currentTok && currentTok.slice(-1) !== 'e' && currentTok.slice(-1) !== 'E') {
+            rawTokens.push(currentTok); currentTok = '';
+          }
+          currentTok += c;
+        } else if (c === '.') {
+          if (currentTok.includes('.')) {
+            rawTokens.push(currentTok); currentTok = '';
+          }
+          currentTok += c;
+        } else {
+          currentTok += c;
+        }
+      }
+      if (currentTok) rawTokens.push(currentTok);
+      
+      const tokens = [];
+      let currentCmdForTok = 'M';
+      let argCountForTok = 0;
+      
+      for (let i = 0; i < rawTokens.length; i++) {
+        const t = rawTokens[i];
+        if (/[a-zA-Z]/.test(t)) {
+          currentCmdForTok = t.toUpperCase();
+          argCountForTok = 0;
+          tokens.push(t);
+        } else {
+          let remaining = t;
+          while (remaining.length > 0) {
+            if (currentCmdForTok === 'A' && (argCountForTok % 7 === 3 || argCountForTok % 7 === 4)) {
+              tokens.push(remaining[0]);
+              remaining = remaining.slice(1);
+              argCountForTok++;
+            } else {
+              tokens.push(remaining);
+              argCountForTok++;
+              break;
+            }
+          }
+        }
+      }
       
       let currentPt = {x: 0, y: 0};
       let startPt = {x: 0, y: 0};

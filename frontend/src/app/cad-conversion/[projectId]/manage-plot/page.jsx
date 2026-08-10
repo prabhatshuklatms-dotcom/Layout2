@@ -60,7 +60,7 @@ export default function ProjectPlotsPage({ params }) {
   // Fetch paginated plots
   useEffect(() => {
     fetchPlots();
-  }, [projectId, currentPage, debouncedSearch]);
+  }, [projectId, currentPage, debouncedSearch, filterStatus, filterAssignment, sortConfig]);
 
   const fetchPlots = async () => {
     try {
@@ -68,7 +68,11 @@ export default function ProjectPlotsPage({ params }) {
       const res = await getProjectPlots(projectId, { 
         page: currentPage, 
         limit, 
-        search: debouncedSearch 
+        search: debouncedSearch,
+        statusId: filterStatus || undefined,
+        assignment: filterAssignment || undefined,
+        sortBy: sortConfig.key,
+        sortOrder: sortConfig.direction
       });
       
       // Handle the new response format or fallback to array if unpaginated (should be paginated here)
@@ -142,39 +146,7 @@ export default function ProjectPlotsPage({ params }) {
     }
   };
 
-  const filteredPlots = plots.filter(plot => {
-    const matchesStatus = filterStatus ? plot.statusId === parseInt(filterStatus) : true;
-    let matchesAssignment = true;
-    if (filterAssignment === 'available') matchesAssignment = !plot.cadRegionId;
-    if (filterAssignment === 'assigned') matchesAssignment = !!plot.cadRegionId;
-    return matchesStatus && matchesAssignment;
-  });
-
-  const sortedPlots = [...filteredPlots].sort((a, b) => {
-    let aVal = a[sortConfig.key];
-    let bVal = b[sortConfig.key];
-    
-    if (sortConfig.key === 'status') {
-      aVal = a.status ? a.status.name : '';
-      bVal = b.status ? b.status.name : '';
-    } else if (sortConfig.key === 'cadRegionId') {
-      aVal = a.cadRegionId ? 1 : 0;
-      bVal = b.cadRegionId ? 1 : 0;
-    }
-
-    if (aVal === null || aVal === undefined) aVal = '';
-    if (bVal === null || bVal === undefined) bVal = '';
-
-    if (sortConfig.key === 'plotNumber') {
-      return sortConfig.direction === 'asc' 
-        ? aVal.toString().localeCompare(bVal.toString(), undefined, { numeric: true, sensitivity: 'base' })
-        : bVal.toString().localeCompare(aVal.toString(), undefined, { numeric: true, sensitivity: 'base' });
-    }
-
-    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-    return 0;
-  });
+  // Frontend filtering and sorting removed, now handled by backend
 
   const handleSort = (key) => {
     let direction = 'asc';
@@ -182,6 +154,7 @@ export default function ProjectPlotsPage({ params }) {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+    setCurrentPage(1);
   };
 
   return (
@@ -227,7 +200,10 @@ export default function ProjectPlotsPage({ params }) {
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
             <select 
               value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
+              onChange={e => {
+                setFilterStatus(e.target.value);
+                setCurrentPage(1);
+              }}
               className="pl-9 pr-8 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-sm appearance-none focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
             >
               <option value="">All Statuses</option>
@@ -240,7 +216,10 @@ export default function ProjectPlotsPage({ params }) {
             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
             <select 
               value={filterAssignment}
-              onChange={e => setFilterAssignment(e.target.value)}
+              onChange={e => {
+                setFilterAssignment(e.target.value);
+                setCurrentPage(1);
+              }}
               className="pl-9 pr-8 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-sm appearance-none focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
             >
               <option value="">All Assignments</option>
@@ -268,10 +247,10 @@ export default function ProjectPlotsPage({ params }) {
               <tbody className="divide-y divide-zinc-800/50">
                 {loading ? (
                   <tr><td colSpan="7" className="px-6 py-8 text-center text-zinc-500">Loading plots...</td></tr>
-                ) : sortedPlots.length === 0 ? (
+                ) : plots.length === 0 ? (
                   <tr><td colSpan="7" className="px-6 py-8 text-center text-zinc-500">No plots found.</td></tr>
                 ) : (
-                  sortedPlots.map(plot => (
+                  plots.map(plot => (
                     <tr key={plot.id} className="hover:bg-zinc-800/20 transition-colors">
                       <td className="px-6 py-4 font-medium text-zinc-200">{plot.plotNumber}</td>
                       <td className="px-6 py-4 text-zinc-400">{PLOT_TYPE_CONFIG[plot.plotType]?.displayName || plot.plotType}</td>

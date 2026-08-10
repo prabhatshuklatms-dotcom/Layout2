@@ -60,11 +60,12 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
   }
 
   if (isSelected && (Tag === 'path' || Tag === 'polygon' || Tag === 'rect' || Tag === 'circle' || Tag === 'polyline' || Tag === 'line')) {
-    reactAttrs.stroke = 'white';
-    reactAttrs.strokeWidth = '3';
+    reactAttrs.strokeWidth = reactAttrs.strokeWidth ? reactAttrs.strokeWidth : '3';
     reactAttrs.filter = 'drop-shadow(0 0 4px rgba(255,255,255,0.8))';
     reactAttrs.paintOrder = 'stroke fill markers';
-    reactAttrs.vectorEffect = 'non-scaling-stroke';
+    if (!reactAttrs.vectorEffect) {
+      reactAttrs.vectorEffect = 'non-scaling-stroke';
+    }
   }
 
   if (Tag === 'g' || Tag === 'defs' || Tag === 'clipPath' || Tag === 'pattern') {

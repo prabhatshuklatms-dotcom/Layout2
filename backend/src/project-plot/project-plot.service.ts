@@ -72,18 +72,42 @@ export class ProjectPlotService {
     });
   }
 
-  async findAllByProject(projectId: number, pageStr?: string, limitStr?: string, search?: string, paginationStr?: string) {
+  async findAllByProject(projectId: number, pageStr?: string, limitStr?: string, search?: string, paginationStr?: string, statusIdStr?: string, assignment?: string, sortBy?: string, sortOrder?: string) {
     const pagination = paginationStr === 'false' ? false : true;
     const page = Math.max(1, parseInt(pageStr || '1', 10) || 1);
     const limit = Math.max(1, parseInt(limitStr || '10', 10) || 10);
     const skip = (page - 1) * limit;
 
     let where: any = { projectId };
+    
     if (search && search.trim()) {
       where = {
         ...where,
         plotNumber: { contains: search.trim(), mode: 'insensitive' }
       };
+    }
+    
+    if (statusIdStr) {
+      const parsedStatus = parseInt(statusIdStr, 10);
+      if (!isNaN(parsedStatus)) {
+        where = { ...where, statusId: parsedStatus };
+      }
+    }
+    
+    if (assignment === 'assigned') {
+      where = { ...where, cadRegionId: { not: null } };
+    } else if (assignment === 'available') {
+      where = { ...where, cadRegionId: null };
+    }
+
+    let orderBy: any = { plotNumber: 'asc' }; // default
+    if (sortBy) {
+      const order = sortOrder === 'desc' ? 'desc' : 'asc';
+      if (sortBy === 'status') {
+        orderBy = { status: { name: order } };
+      } else {
+        orderBy = { [sortBy]: order };
+      }
     }
 
     if (pagination === false) {
@@ -92,7 +116,7 @@ export class ProjectPlotService {
         this.prisma.projectPlot.findMany({
           where,
           include: { status: true },
-          orderBy: { plotNumber: 'asc' },
+          orderBy,
         })
       ]);
       return { data, total };
@@ -102,7 +126,7 @@ export class ProjectPlotService {
     const data = await this.prisma.projectPlot.findMany({
       where,
       include: { status: true },
-      orderBy: { plotNumber: 'asc' },
+      orderBy,
       skip,
       take: limit,
     });

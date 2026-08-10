@@ -23,11 +23,59 @@ const computeTightBBox = (type, attrs) => {
     return { x: minX === Infinity ? 0 : minX, y: minY === Infinity ? 0 : minY, width: maxX === -Infinity ? 0 : maxX - minX, height: maxY === -Infinity ? 0 : maxY - minY };
   } else if (type === 'path') {
     const dStr = attrs.d || '';
-    const regex = /([a-zA-Z]+)|([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)/g;
-    const tokens = [];
-    let match;
-    while ((match = regex.exec(dStr)) !== null) tokens.push(match[0]);
     
+    // Robust tokenization to handle fused flags (e.g. 0120)
+    const rawTokens = [];
+    let currentTok = '';
+    for (let i = 0; i < dStr.length; i++) {
+      const c = dStr[i];
+      if (/[a-zA-Z]/.test(c)) {
+        if (currentTok) { rawTokens.push(currentTok); currentTok = ''; }
+        rawTokens.push(c);
+      } else if (/\s|,/.test(c)) {
+        if (currentTok) { rawTokens.push(currentTok); currentTok = ''; }
+      } else if (c === '-') {
+        if (currentTok && currentTok.slice(-1) !== 'e' && currentTok.slice(-1) !== 'E') {
+          rawTokens.push(currentTok); currentTok = '';
+        }
+        currentTok += c;
+      } else if (c === '.') {
+        if (currentTok.includes('.')) {
+          rawTokens.push(currentTok); currentTok = '';
+        }
+        currentTok += c;
+      } else {
+        currentTok += c;
+      }
+    }
+    if (currentTok) rawTokens.push(currentTok);
+    
+    const tokens = [];
+    let currentCmdForTok = 'M';
+    let argCountForTok = 0;
+    
+    for (let i = 0; i < rawTokens.length; i++) {
+      const t = rawTokens[i];
+      if (/[a-zA-Z]/.test(t)) {
+        currentCmdForTok = t.toUpperCase();
+        argCountForTok = 0;
+        tokens.push(t);
+      } else {
+        let remaining = t;
+        while (remaining.length > 0) {
+          if (currentCmdForTok === 'A' && (argCountForTok % 7 === 3 || argCountForTok % 7 === 4)) {
+            tokens.push(remaining[0]);
+            remaining = remaining.slice(1);
+            argCountForTok++;
+          } else {
+            tokens.push(remaining);
+            argCountForTok++;
+            break;
+          }
+        }
+      }
+    }
+
     if (tokens.length >= 8 && tokens[0] === 'M' && (tokens[3] === 'Q' || tokens[3] === 'q')) {
       const p0x = parseFloat(tokens[1]), p0y = parseFloat(tokens[2]);
       const p1x = parseFloat(tokens[4]), p1y = parseFloat(tokens[5]);
@@ -53,13 +101,49 @@ const computeTightBBox = (type, attrs) => {
       return { x: xExt.min, y: yExt.min, width: xExt.max - xExt.min, height: yExt.max - yExt.min };
     } else {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (let i = 0; i < tokens.length; i++) {
-        if (!isNaN(tokens[i]) && i + 1 < tokens.length && !isNaN(tokens[i+1])) {
-          const x = parseFloat(tokens[i]), y = parseFloat(tokens[i+1]);
-          minX = Math.min(minX, x); minY = Math.min(minY, y);
-          maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+      let activeCmd = 'M';
+      for (let i = 0; i < tokens.length; ) {
+        if (/[a-zA-Z]/.test(tokens[i])) {
+          activeCmd = tokens[i].toUpperCase();
           i++;
         }
+        
+        let consumed = 1;
+        let ptX = null, ptY = null;
+        
+        if (activeCmd === 'Z') {
+          consumed = 0;
+        } else if (activeCmd === 'M' || activeCmd === 'L' || activeCmd === 'T') {
+          if (i + 1 < tokens.length) {
+            ptX = parseFloat(tokens[i]); ptY = parseFloat(tokens[i+1]);
+            consumed = 2;
+          }
+        } else if (activeCmd === 'H' || activeCmd === 'V') {
+          consumed = 1;
+        } else if (activeCmd === 'Q' || activeCmd === 'S') {
+          if (i + 3 < tokens.length) {
+            ptX = parseFloat(tokens[i+2]); ptY = parseFloat(tokens[i+3]);
+            consumed = 4;
+          }
+        } else if (activeCmd === 'C') {
+          if (i + 5 < tokens.length) {
+            ptX = parseFloat(tokens[i+4]); ptY = parseFloat(tokens[i+5]);
+            consumed = 6;
+          }
+        } else if (activeCmd === 'A') {
+          if (i + 6 < tokens.length) {
+            ptX = parseFloat(tokens[i+5]); ptY = parseFloat(tokens[i+6]);
+            consumed = 7;
+          }
+        }
+        
+        if (ptX !== null && ptY !== null && !isNaN(ptX) && !isNaN(ptY)) {
+          minX = Math.min(minX, ptX); minY = Math.min(minY, ptY);
+          maxX = Math.max(maxX, ptX); maxY = Math.max(maxY, ptY);
+        }
+        
+        if (consumed === 0) i++;
+        else i += consumed;
       }
       return { x: minX === Infinity ? 0 : minX, y: minY === Infinity ? 0 : minY, width: maxX === -Infinity ? 0 : maxX - minX, height: maxY === -Infinity ? 0 : maxY - minY };
     }
@@ -123,18 +207,111 @@ export default function TransformControls({ shape, shapeId, svgRef, scale, onTra
       newAttrs.points = pts.join(' ');
     } else if (type === 'path') {
       const dStr = attrs.d || '';
-      const regex = /([a-zA-Z]+)|([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)/g;
-      const tokens = [];
-      let match;
-      while ((match = regex.exec(dStr)) !== null) tokens.push(match[0]);
       
-      for (let i = 0; i < tokens.length; i++) {
-        if (!isNaN(tokens[i]) && i + 1 < tokens.length && !isNaN(tokens[i+1])) {
-          const p = transformPt(parseFloat(tokens[i]), parseFloat(tokens[i+1]));
-          tokens[i] = p.x;
-          tokens[i+1] = p.y;
+      const rawTokens = [];
+      let currentTok = '';
+      for (let i = 0; i < dStr.length; i++) {
+        const c = dStr[i];
+        if (/[a-zA-Z]/.test(c)) {
+          if (currentTok) { rawTokens.push(currentTok); currentTok = ''; }
+          rawTokens.push(c);
+        } else if (/\s|,/.test(c)) {
+          if (currentTok) { rawTokens.push(currentTok); currentTok = ''; }
+        } else if (c === '-') {
+          if (currentTok && currentTok.slice(-1) !== 'e' && currentTok.slice(-1) !== 'E') {
+            rawTokens.push(currentTok); currentTok = '';
+          }
+          currentTok += c;
+        } else if (c === '.') {
+          if (currentTok.includes('.')) {
+            rawTokens.push(currentTok); currentTok = '';
+          }
+          currentTok += c;
+        } else {
+          currentTok += c;
+        }
+      }
+      if (currentTok) rawTokens.push(currentTok);
+      
+      const tokens = [];
+      let currentCmdForTok = 'M';
+      let argCountForTok = 0;
+      
+      for (let i = 0; i < rawTokens.length; i++) {
+        const t = rawTokens[i];
+        if (/[a-zA-Z]/.test(t)) {
+          currentCmdForTok = t.toUpperCase();
+          argCountForTok = 0;
+          tokens.push(t);
+        } else {
+          let remaining = t;
+          while (remaining.length > 0) {
+            if (currentCmdForTok === 'A' && (argCountForTok % 7 === 3 || argCountForTok % 7 === 4)) {
+              tokens.push(remaining[0]);
+              remaining = remaining.slice(1);
+              argCountForTok++;
+            } else {
+              tokens.push(remaining);
+              argCountForTok++;
+              break;
+            }
+          }
+        }
+      }
+      
+      let activeCmd = 'M';
+      for (let i = 0; i < tokens.length; ) {
+        if (/[a-zA-Z]/.test(tokens[i])) {
+          activeCmd = tokens[i].toUpperCase();
           i++;
         }
+        
+        let consumed = 1;
+        
+        if (activeCmd === 'Z') {
+          consumed = 0;
+        } else if (activeCmd === 'M' || activeCmd === 'L' || activeCmd === 'T') {
+          if (i + 1 < tokens.length) {
+            const p = transformPt(parseFloat(tokens[i]), parseFloat(tokens[i+1]));
+            tokens[i] = p.x; tokens[i+1] = p.y;
+            consumed = 2;
+          }
+        } else if (activeCmd === 'H' || activeCmd === 'V') {
+          // Horizontal/Vertical lines become absolute lines under arbitrary transforms (especially rotation).
+          // Proper path baking for H/V is highly complex (they must be converted to L first).
+          // For now, avoid crashing.
+          consumed = 1;
+        } else if (activeCmd === 'Q' || activeCmd === 'S') {
+          if (i + 3 < tokens.length) {
+            const p1 = transformPt(parseFloat(tokens[i]), parseFloat(tokens[i+1]));
+            const p2 = transformPt(parseFloat(tokens[i+2]), parseFloat(tokens[i+3]));
+            tokens[i] = p1.x; tokens[i+1] = p1.y;
+            tokens[i+2] = p2.x; tokens[i+3] = p2.y;
+            consumed = 4;
+          }
+        } else if (activeCmd === 'C') {
+          if (i + 5 < tokens.length) {
+            const p1 = transformPt(parseFloat(tokens[i]), parseFloat(tokens[i+1]));
+            const p2 = transformPt(parseFloat(tokens[i+2]), parseFloat(tokens[i+3]));
+            const p3 = transformPt(parseFloat(tokens[i+4]), parseFloat(tokens[i+5]));
+            tokens[i] = p1.x; tokens[i+1] = p1.y;
+            tokens[i+2] = p2.x; tokens[i+3] = p2.y;
+            tokens[i+4] = p3.x; tokens[i+5] = p3.y;
+            consumed = 6;
+          }
+        } else if (activeCmd === 'A') {
+          if (i + 6 < tokens.length) {
+            // Transform only the endpoints for an Arc.
+            // (Strictly, radii rx/ry and x-axis-rotation also need complex math if scaling is non-uniform or rotating.
+            // But we can at least safely transform the endpoint)
+            const p = transformPt(parseFloat(tokens[i+5]), parseFloat(tokens[i+6]));
+            tokens[i+5] = p.x; tokens[i+6] = p.y;
+            consumed = 7;
+          }
+        }
+        
+        if (consumed === 0) i++;
+        else i += consumed;
       }
       newAttrs.d = tokens.join(' ');
     }
@@ -173,17 +350,23 @@ export default function TransformControls({ shape, shapeId, svgRef, scale, onTra
         startTransformStr.current = el.getAttribute('transform') || '';
         startAttributes.current = { ...shape.attributes };
         const tightBox = computeTightBBox(shape.type, shape.attributes);
-        setBBox(tightBox);
+        setBBox(prev => {
+          if (prev && prev.x === tightBox.x && prev.y === tightBox.y && prev.width === tightBox.width && prev.height === tightBox.height) return prev;
+          return tightBox;
+        });
         setLiveTransformStr(null);
         liveAttributesRef.current = null;
       } else {
         const box = el.getBBox();
         if (box.width === 0 && box.height === 0 && !isGeometryType) return;
-        setBBox({
-          x: box.x,
-          y: box.y,
-          width: box.width,
-          height: box.height
+        setBBox(prev => {
+          if (prev && prev.x === box.x && prev.y === box.y && prev.width === box.width && prev.height === box.height) return prev;
+          return {
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: box.height
+          };
         });
         startTransformStr.current = el.getAttribute('transform') || '';
         setLiveTransformStr(null);
@@ -606,18 +789,104 @@ export default function TransformControls({ shape, shapeId, svgRef, scale, onTra
         points.push({ id: 'arrow-end', x: ax2, y: ay2 });
       } else {
         const dStr = currentAttrs.d ?? shape.attributes.d ?? '';
-        const regex = /([a-zA-Z]+)|([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)/g;
-        const tokens = [];
-        let match;
-        while ((match = regex.exec(dStr)) !== null) tokens.push(match[0]);
         
-        let pairCount = 0;
-        for (let i = 0; i < tokens.length; i++) {
-          if (!isNaN(tokens[i]) && i + 1 < tokens.length && !isNaN(tokens[i+1])) {
-            points.push({ id: `path-${pairCount}`, x: parseFloat(tokens[i]), y: parseFloat(tokens[i+1]) });
-            pairCount++;
-            i++; 
+        // Robust tokenization to handle fused flags (e.g. 0120)
+        const rawTokens = [];
+        let currentTok = '';
+        for (let i = 0; i < dStr.length; i++) {
+          const c = dStr[i];
+          if (/[a-zA-Z]/.test(c)) {
+            if (currentTok) { rawTokens.push(currentTok); currentTok = ''; }
+            rawTokens.push(c);
+          } else if (/\s|,/.test(c)) {
+            if (currentTok) { rawTokens.push(currentTok); currentTok = ''; }
+          } else if (c === '-') {
+            if (currentTok && currentTok.slice(-1) !== 'e' && currentTok.slice(-1) !== 'E') {
+              rawTokens.push(currentTok); currentTok = '';
+            }
+            currentTok += c;
+          } else if (c === '.') {
+            if (currentTok.includes('.')) {
+              rawTokens.push(currentTok); currentTok = '';
+            }
+            currentTok += c;
+          } else {
+            currentTok += c;
           }
+        }
+        if (currentTok) rawTokens.push(currentTok);
+        
+        const tokens = [];
+        let currentCmdForTok = 'M';
+        let argCountForTok = 0;
+        
+        for (let i = 0; i < rawTokens.length; i++) {
+          const t = rawTokens[i];
+          if (/[a-zA-Z]/.test(t)) {
+            currentCmdForTok = t.toUpperCase();
+            argCountForTok = 0;
+            tokens.push(t);
+          } else {
+            let remaining = t;
+            while (remaining.length > 0) {
+              if (currentCmdForTok === 'A' && (argCountForTok % 7 === 3 || argCountForTok % 7 === 4)) {
+                tokens.push(remaining[0]);
+                remaining = remaining.slice(1);
+                argCountForTok++;
+              } else {
+                tokens.push(remaining);
+                argCountForTok++;
+                break;
+              }
+            }
+          }
+        }
+        
+        // Parse points properly based on command
+        let activeCmd = 'M';
+        let pairCount = 0;
+        for (let i = 0; i < tokens.length; ) {
+          if (/[a-zA-Z]/.test(tokens[i])) {
+            activeCmd = tokens[i].toUpperCase();
+            i++;
+          }
+          
+          let consumed = 1;
+          let ptX = null, ptY = null;
+          
+          if (activeCmd === 'Z') {
+            consumed = 0;
+          } else if (activeCmd === 'M' || activeCmd === 'L' || activeCmd === 'T') {
+            if (i + 1 < tokens.length) {
+              ptX = parseFloat(tokens[i]); ptY = parseFloat(tokens[i+1]);
+              consumed = 2;
+            }
+          } else if (activeCmd === 'H' || activeCmd === 'V') {
+            consumed = 1;
+          } else if (activeCmd === 'Q' || activeCmd === 'S') {
+            if (i + 3 < tokens.length) {
+              ptX = parseFloat(tokens[i+2]); ptY = parseFloat(tokens[i+3]);
+              consumed = 4;
+            }
+          } else if (activeCmd === 'C') {
+            if (i + 5 < tokens.length) {
+              ptX = parseFloat(tokens[i+4]); ptY = parseFloat(tokens[i+5]);
+              consumed = 6;
+            }
+          } else if (activeCmd === 'A') {
+            if (i + 6 < tokens.length) {
+              ptX = parseFloat(tokens[i+5]); ptY = parseFloat(tokens[i+6]);
+              consumed = 7;
+            }
+          }
+          
+          if (ptX !== null && ptY !== null && !isNaN(ptX) && !isNaN(ptY)) {
+            points.push({ id: `path-${pairCount}`, x: ptX, y: ptY });
+            pairCount++;
+          }
+          
+          if (consumed === 0) i++; // Fallback to avoid infinite loop
+          else i += consumed;
         }
       }
     }
@@ -638,18 +907,6 @@ export default function TransformControls({ shape, shapeId, svgRef, scale, onTra
            <path d={currentAttrs.d ?? shape.attributes.d} stroke="transparent" strokeWidth={20 / actualScale} fill="none" cursor="move" pointerEvents="stroke" onPointerDown={(e) => handlePointerDown(e, 'move')} />
         )}
         
-        {/* Rotation Handle (centered above bounding box top edge) */}
-        <line 
-          x1={dynBbox.x + dynBbox.width/2} y1={dynBbox.y} x2={dynBbox.x + dynBbox.width/2} y2={dynBbox.y - rotLineLen} 
-          stroke="#3b82f6" strokeWidth={strokeW} pointerEvents="none" 
-        />
-        <circle 
-          cx={dynBbox.x + dynBbox.width/2} cy={dynBbox.y - rotLineLen} r={handleSize} 
-          fill="#ffffff" stroke="#3b82f6" strokeWidth={strokeW}
-          cursor="crosshair" pointerEvents="all"
-          onPointerDown={(e) => handlePointerDown(e, 'rotate')}
-        />
-
         {/* Anchor Points */}
         {points.map((pt, index) => (
           <circle 
@@ -678,16 +935,7 @@ export default function TransformControls({ shape, shapeId, svgRef, scale, onTra
 
         {/* Central Move Handle */}
         {renderMoveHandle(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2)}
-        <line 
-          x1={bbox.x + bbox.width/2} y1={bbox.y} x2={bbox.x + bbox.width/2} y2={bbox.y - rotLineLen} 
-          stroke="#3b82f6" strokeWidth={strokeW} pointerEvents="none" 
-        />
-        <circle 
-          cx={bbox.x + bbox.width/2} cy={bbox.y - rotLineLen} r={handleSize} 
-          fill="#ffffff" stroke="#3b82f6" strokeWidth={strokeW}
-          cursor="crosshair" pointerEvents="all"
-          onPointerDown={(e) => handlePointerDown(e, 'rotate')}
-        />
+
         {[
           { x: bbox.x, y: bbox.y, cursor: 'nwse-resize', type: 'resize-nw' },
           { x: bbox.x + bbox.width/2, y: bbox.y, cursor: 'ns-resize', type: 'resize-n' },

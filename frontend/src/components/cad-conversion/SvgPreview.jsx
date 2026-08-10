@@ -139,11 +139,12 @@ export default function SvgPreview({ conversion, conversions = [], projectId }) 
 
       Promise.all([
         fetch(`${API_URL}/api/cad-conversion/${conversion.id}/svg`).then(r => r.ok ? r.text() : Promise.reject('SVG failed')),
-        fetch(`${API_URL}/api/projects/${projectId}/plots`).then(r => r.ok ? r.json() : []),
+        fetch(`${API_URL}/api/projects/${projectId}/plots?pagination=false`).then(r => r.ok ? r.json() : []),
         fetch(`${API_URL}/api/plot-statuses/project/${projectId}`).then(r => r.ok ? r.json() : []),
         fetch(`${API_URL}/api/amenities`).then(r => r.ok ? r.json() : []),
         fetch(`${API_URL}/api/amenity-placement?conversionId=${conversion.id}`).then(r => r.ok ? r.json() : [])
-      ]).then(([svgText, fetchedPlots, fetchedStatuses, fetchedAmenities, fetchedPlacements]) => {
+      ]).then(([svgText, plotsResponse, fetchedStatuses, fetchedAmenities, fetchedPlacements]) => {
+        const fetchedPlots = Array.isArray(plotsResponse) ? plotsResponse : (plotsResponse?.data || []);
         // Extract viewBox from svgText
         const match = svgText.match(/viewBox=["']([^"']+)["']/i);
         if (match && match[1]) {
@@ -152,9 +153,9 @@ export default function SvgPreview({ conversion, conversions = [], projectId }) 
         
         setSvgContent(svgText);
         setPlots(fetchedPlots);
-        setStatuses(fetchedStatuses);
-        setAmenities(fetchedAmenities);
-        setPlacements(fetchedPlacements);
+        setStatuses(Array.isArray(fetchedStatuses) ? fetchedStatuses : (fetchedStatuses?.data || []));
+        setAmenities(Array.isArray(fetchedAmenities) ? fetchedAmenities : (fetchedAmenities?.data || []));
+        setPlacements(Array.isArray(fetchedPlacements) ? fetchedPlacements : (fetchedPlacements?.data || []));
         setLoading(false);
       }).catch(err => {
         console.error(err);
