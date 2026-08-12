@@ -68,3 +68,7 @@ body {
 .viewer-canvas-no-grid [data-tool] {
   background-image: none !important;
 }
+
+/* ── Hide scrollbar while keeping scroll (used in plot pan chip row) ─────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

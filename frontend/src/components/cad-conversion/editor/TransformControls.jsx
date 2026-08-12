@@ -206,9 +206,16 @@ export default function TransformControls({ shape, shapeId, svgRef, scale, onTra
       }
       newAttrs.points = pts.join(' ');
     } else if (type === 'path') {
-      const dStr = attrs.d || '';
-      
-      const rawTokens = [];
+      if (attrs['data-cad-type'] === 'arrow') {
+        const p1 = transformPt(parseFloat(attrs['data-start-x']), parseFloat(attrs['data-start-y']));
+        const p2 = transformPt(parseFloat(attrs['data-end-x']), parseFloat(attrs['data-end-y']));
+        newAttrs['data-start-x'] = p1.x; newAttrs['data-start-y'] = p1.y;
+        newAttrs['data-end-x'] = p2.x; newAttrs['data-end-y'] = p2.y;
+        newAttrs.d = calculateArrowPath(p1, p2, parseFloat(attrs['stroke-width'] || 2));
+      } else {
+        const dStr = attrs.d || '';
+        
+        const rawTokens = [];
       let currentTok = '';
       for (let i = 0; i < dStr.length; i++) {
         const c = dStr[i];
@@ -314,6 +321,7 @@ export default function TransformControls({ shape, shapeId, svgRef, scale, onTra
         else i += consumed;
       }
       newAttrs.d = tokens.join(' ');
+      }
     }
     return newAttrs;
   };
@@ -891,9 +899,9 @@ export default function TransformControls({ shape, shapeId, svgRef, scale, onTra
       }
     }
 
-    // Geometry is always in global space now (transform="").
+    // Geometry handles should still respect currentTransform if it exists before bake
     return (
-      <g pointerEvents="all">
+      <g pointerEvents="all" transform={currentTransform}>
 
 
         {/* Ghost stroke for dragging the whole geometry intuitively without blocking clicks */}

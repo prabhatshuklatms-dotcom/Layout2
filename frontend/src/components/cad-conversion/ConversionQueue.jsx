@@ -89,13 +89,13 @@ export default function ConversionQueue({ conversions, selectedId, onSelect, onD
           <div
             key={conv.id}
             onClick={() => onSelect(conv.id)}
-            className={`group relative flex items-start gap-3 p-4 border-b border-zinc-800/50 text-left transition-colors cursor-pointer hover:bg-zinc-900/50
+            className={`group relative flex items-start gap-3 p-4 border-b border-zinc-800/50 text-left transition-colors cursor-pointer hover:bg-zinc-900/50 touch-manipulation
               ${selectedId === conv.id ? 'bg-zinc-900 border-l-2 border-l-indigo-500 pl-[14px]' : 'border-l-2 border-l-transparent'}`}
           >
             <div className="mt-0.5 shrink-0">
               {getStatusIcon(conv.status)}
             </div>
-            <div className="flex-1 min-w-0 pr-12">
+            <div className="flex-1 min-w-0 pr-14 sm:pr-12">
               {editingId === conv.id ? (
                 <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                   <input
@@ -127,29 +127,29 @@ export default function ConversionQueue({ conversions, selectedId, onSelect, onD
                 <span className="capitalize">{conv.status.toLowerCase()}</span>
               </div>
             </div>
-            {/* Actions overlay */}
+            {/* Actions overlay — always visible on touch devices, hover-only on desktop */}
             {editingId !== conv.id && (
-              <div className="absolute right-3 top-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900/80 backdrop-blur-sm rounded p-1">
+              <div className="absolute right-2 top-3 flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-zinc-900/90 backdrop-blur-sm rounded p-1">
                 <button
                   onClick={(e) => handleReuploadClick(e, conv.id)}
-                  className="text-zinc-400 hover:text-indigo-400 p-1.5 rounded hover:bg-zinc-800 transition-colors"
+                  className="text-zinc-400 hover:text-indigo-400 active:text-indigo-400 p-2 sm:p-1.5 rounded hover:bg-zinc-800 active:bg-zinc-800 transition-colors touch-manipulation"
                   title="Replace File"
                 >
-                  <UploadCloud size={14} />
+                  <UploadCloud size={15} />
                 </button>
                 <button
                   onClick={(e) => startEdit(e, conv)}
-                  className="text-zinc-400 hover:text-white p-1.5 rounded hover:bg-zinc-800 transition-colors"
+                  className="text-zinc-400 hover:text-white active:text-white p-2 sm:p-1.5 rounded hover:bg-zinc-800 active:bg-zinc-800 transition-colors touch-manipulation"
                   title="Rename"
                 >
-                  <Edit2 size={14} />
+                  <Edit2 size={15} />
                 </button>
                 <button
                   onClick={(e) => handleDelete(e, conv.id)}
-                  className="text-zinc-400 hover:text-red-500 p-1.5 rounded hover:bg-zinc-800 transition-colors"
+                  className="text-zinc-400 hover:text-red-500 active:text-red-500 p-2 sm:p-1.5 rounded hover:bg-zinc-800 active:bg-zinc-800 transition-colors touch-manipulation"
                   title="Delete"
                 >
-                  <Trash2 size={14} />
+                  <Trash2 size={15} />
                 </button>
               </div>
             )}

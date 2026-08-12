@@ -667,6 +667,9 @@ export default function CadEditorCanvas({
   const lastMouse = useRef({ x: 0, y: 0 });
   const reqFrame = useRef(null);
 
+  // readOnly click-vs-drag detection
+  const pointerDownPos = useRef(null);
+
   // For pointer/space pan
   const [isSpaceDown, setIsSpaceDown] = useState(false);
   const isSpaceDownRef = useRef(false);
@@ -1277,6 +1280,7 @@ export default function CadEditorCanvas({
       if (e.button === 1 || isSpaceDownRef.current || e.button === 0) {
         isDragging.current = true;
         lastMouse.current = { x: e.clientX, y: e.clientY };
+        pointerDownPos.current = { x: e.clientX, y: e.clientY };
         e.preventDefault();
       }
       return;
@@ -1809,7 +1813,7 @@ export default function CadEditorCanvas({
     const newShape = {
       id: shapeId,
       type: '',
-      attributes: { stroke: strokeColor, "stroke-width": strokeWidth, fill: "none", "vector-effect": "non-scaling-stroke", "data-custom-color": "true" },
+      attributes: { stroke: strokeColor, "stroke-width": strokeWidth, fill: "none", "data-custom-color": "true" },
       transform: { tx: 0, ty: 0, rot: 0, sx: 1, sy: 1 },
       children: []
     };
@@ -1849,7 +1853,7 @@ export default function CadEditorCanvas({
     const newShape = {
       id: shapeId,
       type: 'path',
-      attributes: { d: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`, stroke: strokeColor, "stroke-width": strokeWidth, fill: "none", "vector-effect": "non-scaling-stroke", "data-custom-color": "true" },
+      attributes: { d: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`, stroke: strokeColor, "stroke-width": strokeWidth, fill: "none", "data-custom-color": "true" },
       transform: { tx: 0, ty: 0, rot: 0, sx: 1, sy: 1 },
       children: []
     };
@@ -1873,7 +1877,7 @@ export default function CadEditorCanvas({
     const newShape = {
       id: shapeId,
       type: 'polyline',
-      attributes: { points: pointsStr, fill: "none", stroke: strokeColor, "stroke-width": strokeWidth, "vector-effect": "non-scaling-stroke", "data-custom-color": "true" },
+      attributes: { points: pointsStr, fill: "none", stroke: strokeColor, "stroke-width": strokeWidth, "data-custom-color": "true" },
       transform: { tx: 0, ty: 0, rot: 0, sx: 1, sy: 1 },
       children: []
     };
@@ -1941,7 +1945,56 @@ export default function CadEditorCanvas({
 
   const handlePointerUp = (e) => {
     if (readOnly) {
+      // Detect click vs drag: if pointer barely moved it's a tap/click
+      const down = pointerDownPos.current;
+      const moved = down
+        ? Math.hypot(e.clientX - down.x, e.clientY - down.y)
+        : 999;
+      pointerDownPos.current = null;
       isDragging.current = false;
+
+      if (moved < 6 && e.button === 0) {
+        // Hit-test the SVG for a plot region
+        const svgEl = svgRef.current?.tagName?.toLowerCase() === 'svg'
+          ? svgRef.current
+          : svgRef.current?.querySelector('svg');
+
+        let selectedPlot = null;
+        let selectedShapeId = null;
+
+        if (svgEl) {
+          const hit = cadHitTestRegion(svgEl, e.clientX, e.clientY);
+          if (hit) {
+            const hitEl = hit.element || hit;
+            // Walk up to find the element with data-plot-id
+            let el = hitEl;
+            while (el && el !== svgEl) {
+              if (el.getAttribute?.('data-plot-id')) break;
+              el = el.parentElement;
+            }
+            const plotIdStr = el?.getAttribute?.('data-plot-id');
+            selectedShapeId = el?.id || null;
+            if (plotIdStr && plots) {
+              selectedPlot = plots.find(p => p.id === parseInt(plotIdStr)) || null;
+            }
+          }
+        }
+
+        // Update internal selection state so SelectedPlotGeometryOverlay fires
+        setSelectedShapeIds(selectedShapeId ? [selectedShapeId] : []);
+
+        if (onSelectionChange) {
+          if (selectedShapeId) {
+            const shape = findShapeDeep(documentState.shapes, selectedShapeId)?.shape;
+            onSelectionChange(
+              [selectedShapeId],
+              shape ? [shape] : []
+            );
+          } else {
+            onSelectionChange([], []);
+          }
+        }
+      }
       return;
     }
     if (activeTool === 'draw_curve' && drawStep === 2 && drawStart && drawEnd) {
@@ -2342,33 +2395,33 @@ export default function CadEditorCanvas({
                   <line
                     x1={drawStart.x} y1={drawStart.y}
                     x2={currentDrawCoords.x} y2={currentDrawCoords.y}
-                    stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke"
+                    stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4"
                   />
                 )}
                 {activeTool === 'draw_arrow' && drawStart && currentDrawCoords && (
                   <path
                     d={calculateArrowPath(drawStart, currentDrawCoords, strokeWidth)}
-                    fill="none" stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round"
+                    fill="none" stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" strokeLinejoin="round" strokeLinecap="round"
                   />
                 )}
                 {activeTool === 'draw_circle' && drawStart && currentDrawCoords && (
                   <circle
                     cx={drawStart.x} cy={drawStart.y}
                     r={Math.sqrt(Math.pow(currentDrawCoords.x - drawStart.x, 2) + Math.pow(currentDrawCoords.y - drawStart.y, 2))}
-                    stroke="#a5b4fc" strokeWidth={strokeWidth} fill="none" strokeDasharray="4" vectorEffect="non-scaling-stroke"
+                    stroke="#a5b4fc" strokeWidth={strokeWidth} fill="none" strokeDasharray="4"
                   />
                 )}
                 {activeTool === 'draw_curve' && drawStart && currentDrawCoords && drawStep === 1 && (
                   <line
                     x1={drawStart.x} y1={drawStart.y}
                     x2={currentDrawCoords.x} y2={currentDrawCoords.y}
-                    stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke"
+                    stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4"
                   />
                 )}
                 {activeTool === 'draw_curve' && drawStart && drawEnd && currentDrawCoords && drawStep === 2 && (
                   <path
                     d={`M ${drawStart.x} ${drawStart.y} Q ${((drawStart.x + drawEnd.x) / 2) + (currentDrawCoords.x - drawEnd.x)} ${((drawStart.y + drawEnd.y) / 2) + (currentDrawCoords.y - drawEnd.y)} ${drawEnd.x} ${drawEnd.y}`}
-                    fill="none" stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4" vectorEffect="non-scaling-stroke"
+                    fill="none" stroke="#a5b4fc" strokeWidth={strokeWidth} strokeDasharray="4"
                   />
                 )}
 

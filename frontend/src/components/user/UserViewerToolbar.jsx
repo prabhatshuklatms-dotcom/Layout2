@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { ZoomIn, ZoomOut, Maximize, RotateCcw, Share2, Map as MapIcon, Image as ImageIcon } from 'lucide-react';
 import Link from 'next/link';
-import { ArrowLeft, ZoomIn, ZoomOut, Maximize, RotateCcw, Share2, Map as MapIcon, Image as ImageIcon } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { getProjectPlotStatuses } from '@/lib/api';
 
@@ -81,27 +81,8 @@ export default function UserViewerToolbar({
     <div className="absolute top-0 left-0 w-full z-[1000] pointer-events-none p-4">
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 max-w-7xl mx-auto">
         
-        {/* Left Side: Navigation & Info */}
-        <div className="flex items-center gap-3 bg-zinc-900/80 backdrop-blur-md shadow-lg border border-zinc-700/50 rounded-xl p-2 pointer-events-auto">
-          <Link 
-            href="/projects" 
-            className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100 group"
-            title="Back to Projects"
-          >
-            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-          </Link>
-          
-          <div className="h-6 w-px bg-zinc-700 mx-1"></div>
-          
-          <div className="px-2 flex flex-col justify-center min-w-[150px]">
-            <h1 className="text-sm font-bold text-zinc-100 leading-tight truncate max-w-[200px]">
-              {project?.name || 'Project Layout'}
-            </h1>
-            <p className="text-[11px] text-zinc-400 font-medium truncate max-w-[200px] mt-0.5">
-              {isMapView ? 'Map View' : (layoutName || 'Master Plan')}
-            </p>
-          </div>
-        </div>
+        {/* Left Side: spacer to keep center/right aligned */}
+        <div className="flex-1"></div>
 
         {/* Center: Zoom Controls */}
         <div className="flex items-center gap-1 bg-zinc-900/80 backdrop-blur-md shadow-lg border border-zinc-700/50 rounded-xl p-1.5 pointer-events-auto">

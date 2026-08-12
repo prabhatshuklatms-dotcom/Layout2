@@ -97,7 +97,7 @@ const LeafletMap = forwardRef(function LeafletMap(
         shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
       });
 
-      const mapOpts = { zoomControl: false };
+      const mapOpts = { zoomControl: false, maxZoom: 28 };
       if (!initialBounds) {
         mapOpts.center = [20.5937, 78.9629];
         mapOpts.zoom = 5;
@@ -673,6 +673,7 @@ const LeafletMap = forwardRef(function LeafletMap(
             statuses={statuses}
             showPlotStatus={showPlotStatus}
             projectConfig={projectConfig}
+            readOnly={staticPreview}
             isSelected={selectedLayoutId === layout.id}
             onSelect={() => setSelectedLayoutId(layout.id)}
             onTransformChange={(newDraft) => {
@@ -701,7 +702,7 @@ function buildTileLayers(Lf, type) {
     return {
       base: Lf.tileLayer(
         'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        { attribution: '© Google', maxZoom: 21, subdomains: ['0','1','2','3'] },
+        { attribution: '© Google', maxZoom: 28, maxNativeZoom: 21, subdomains: ['0','1','2','3'] },
       ),
       label: null,
     };
@@ -710,18 +711,18 @@ function buildTileLayers(Lf, type) {
     return {
       base: Lf.tileLayer(
         'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        { attribution: '© Google', maxZoom: 21, subdomains: ['0','1','2','3'] },
+        { attribution: '© Google', maxZoom: 28, maxNativeZoom: 21, subdomains: ['0','1','2','3'] },
       ),
       label: Lf.tileLayer(
         'https://mt{s}.google.com/vt/lyrs=h&x={x}&y={y}&z={z}',
-        { attribution: '© Google', maxZoom: 21, subdomains: ['0','1','2','3'], opacity: 0.9 },
+        { attribution: '© Google', maxZoom: 28, maxNativeZoom: 21, subdomains: ['0','1','2','3'], opacity: 0.9 },
       ),
     };
   }
   return {
     base: Lf.tileLayer(
       'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      { attribution: '© OpenStreetMap contributors', maxZoom: 19 },
+      { attribution: '© OpenStreetMap contributors', maxZoom: 28, maxNativeZoom: 19 },
     ),
     label: null,
   };

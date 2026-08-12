@@ -52,7 +52,7 @@ export default function ProjectMap({ project }) {
         ) : boundary ? (
           <div className="flex flex-col w-full h-full">
             {/* Map Preview */}
-            <div className="w-full h-142 relative bg-[#0a0a0a] pointer-events-none">
+            <div className="w-full h-48 sm:h-64 lg:h-80 xl:h-72 2xl:h-80 relative bg-[#0a0a0a] pointer-events-none">
                <LeafletMap
                   mapType="hybrid"
                   drawMode={BOUNDARY_DRAW_MODE.POINTER}

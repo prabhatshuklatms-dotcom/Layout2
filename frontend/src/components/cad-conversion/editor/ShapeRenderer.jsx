@@ -40,6 +40,10 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
     }
   }
 
+  if (reactAttrs.dataCustomColor === 'true' && reactAttrs.vectorEffect) {
+    delete reactAttrs.vectorEffect;
+  }
+
   const resolvedFill = resolvePlotFill(shape, plots, statuses, showPlotStatus);
 
   if (resolvedFill !== null) {
@@ -63,9 +67,6 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
     reactAttrs.strokeWidth = reactAttrs.strokeWidth ? reactAttrs.strokeWidth : '3';
     reactAttrs.filter = 'drop-shadow(0 0 4px rgba(255,255,255,0.8))';
     reactAttrs.paintOrder = 'stroke fill markers';
-    if (!reactAttrs.vectorEffect) {
-      reactAttrs.vectorEffect = 'non-scaling-stroke';
-    }
   }
 
   if (Tag === 'g' || Tag === 'defs' || Tag === 'clipPath' || Tag === 'pattern') {

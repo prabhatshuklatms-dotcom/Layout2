@@ -260,6 +260,11 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
     }
   };
 
+  // Responsive state
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [layoutsOpen, setLayoutsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('boundary'); // mobile tabs: boundary/layouts/map
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-black text-white">
@@ -304,26 +309,39 @@ export default function ProjectBoundaryWorkspace({ projectId }) {
 
   const activeId = boundary ? (boundary.id || 999) : null;
 
+
   return (
     <div className="flex flex-col h-screen bg-black overflow-hidden text-zinc-300">
       {/* Top Navbar */}
-      <header className="h-14 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between px-6 shrink-0 z-50 shadow-md">
-        <div className="flex items-center gap-6">
+      <header className="h-14 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between px-4 sm:px-6 shrink-0 z-50 shadow-md">
+        <div className="flex items-center gap-4">
+          {/* Mobile menu toggle */}
+          <button
+            className="lg:hidden text-zinc-400 hover:text-white p-1 -ml-1 rounded"
+            onClick={() => setSidebarOpen(v => !v)}
+            aria-label="Toggle sidebar"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 12h18M3 6h18M3 18h18"/>
+            </svg>
+          </button>
+
           <Link 
             href={`/cad-conversion/${projectId}`} 
             className="text-zinc-400 hover:text-white transition-colors flex items-center gap-2 text-sm font-medium"
           >
             <ArrowLeft size={16} />
-            Back to Dashboard
+            <span className="hidden sm:inline">Back to Dashboard</span>
           </Link>
           <div className="w-px h-6 bg-zinc-800"/>
-          <h1 className="text-sm font-semibold text-zinc-100 uppercase tracking-widest flex items-center gap-2">
-            <MapPin size={16} className="text-emerald-400" />
-            Project Land Boundary
+          <h1 className="text-sm font-semibold text-zinc-100 uppercase tracking-widest flex items-center gap-2 truncate max-w-[120px] sm:max-w-none">
+            <MapPin size={16} className="text-emerald-400 shrink-0" />
+            <span className="truncate">Land Boundary</span>
           </h1>
         </div>
 
-        <div className="flex items-center gap-2 bg-zinc-900 rounded-md p-1 border border-zinc-800">
+        {/* Desktop toolbar */}
+        <div className="hidden lg:flex items-center gap-2 bg-zinc-900 rounded-md p-1 border border-zinc-800">
           <button 
             className={`p-2 rounded ${!boundaryVisible ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
             onClick={() => setBoundaryVisible(!boundaryVisible)}

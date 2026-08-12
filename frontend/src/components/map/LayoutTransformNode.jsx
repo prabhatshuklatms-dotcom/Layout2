@@ -47,7 +47,8 @@ export default function LayoutTransformNode({
   plots,
   statuses,
   showPlotStatus,
-  projectConfig
+  projectConfig,
+  readOnly = false
 }) {
   const [imgSize, setImgSize] = useState(null);
   const [svgUrl, setSvgUrl] = useState(null);
@@ -135,7 +136,19 @@ export default function LayoutTransformNode({
         // single source of truth — matching the editor's PlotLabelsOverlay exactly.
         let displaySvgStr = cleanSvgStr;
         displaySvgStr = stripGroupById(displaySvgStr, 'composite-plot-labels');
-        displaySvgStr = stripGroupById(displaySvgStr, 'composite-amenities');
+        
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(displaySvgStr, 'image/svg+xml');
+          const tools = doc.querySelectorAll('[data-custom-color="true"]');
+          tools.forEach(el => {
+            el.removeAttribute('vector-effect');
+          });
+          displaySvgStr = new XMLSerializer().serializeToString(doc);
+        } catch (e) {
+          console.error("Error applying tool rendering overrides to Map SVG", e);
+        }
+
         setSvgRaw(displaySvgStr);
         if (data.interactionPolygon) {
           setInteractionPolygon(data.interactionPolygon);
@@ -296,7 +309,7 @@ export default function LayoutTransformNode({
   const isTransforming = useRef(false);
 
   const handlePointerDown = (e, type, vertexIndex) => {
-    if (!isSelected || !map || !interactionPolygon || !imgSize) return;
+    if (readOnly || !isSelected || !map || !interactionPolygon || !imgSize) return;
     e.stopPropagation();
     e.preventDefault();
 
@@ -500,13 +513,13 @@ export default function LayoutTransformNode({
       }}
     >
       <style>{`
-        .cad-viewer-global-styles svg path:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-        .cad-viewer-global-styles svg line:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-        .cad-viewer-global-styles svg polyline:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-        .cad-viewer-global-styles svg polygon:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-        .cad-viewer-global-styles svg rect:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-        .cad-viewer-global-styles svg circle:not([stroke="none"]):not([stroke="transparent"]):not([filter]),
-        .cad-viewer-global-styles svg ellipse:not([stroke="none"]):not([stroke="transparent"]):not([filter]) {
+        .cad-viewer-global-styles svg path:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+        .cad-viewer-global-styles svg line:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+        .cad-viewer-global-styles svg polyline:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+        .cad-viewer-global-styles svg polygon:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+        .cad-viewer-global-styles svg rect:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+        .cad-viewer-global-styles svg circle:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]),
+        .cad-viewer-global-styles svg ellipse:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]) {
           stroke: var(--layout-line-color) !important;
         }
       `}</style>
@@ -539,12 +552,12 @@ export default function LayoutTransformNode({
           stroke={isSelected ? "#3b82f6" : "transparent"} 
           strokeWidth={isSelected ? 'calc(1.5 / var(--combined-scale))' : 0}
           strokeLinejoin="round"
-          style={{ pointerEvents: 'auto', cursor: isSelected ? 'move' : 'pointer' }}
-          onClick={(e) => { e.stopPropagation(); if (!isSelected && onSelect) onSelect(); }}
-          onPointerDown={(e) => handlePointerDown(e, 'move', null)}
+          style={{ pointerEvents: readOnly ? 'none' : 'auto', cursor: isSelected ? 'move' : 'pointer' }}
+          onClick={(e) => { if (readOnly) return; e.stopPropagation(); if (!isSelected && onSelect) onSelect(); }}
+          onPointerDown={(e) => { if (readOnly) return; handlePointerDown(e, 'move', null); }}
         />
       </svg>
-      {isSelected && (
+      {isSelected && !readOnly && (
         <>
           {/* Centroid Crosshair */}
           <div className="absolute w-2 h-2 rounded-full border border-[#3b82f6] pointer-events-none" 

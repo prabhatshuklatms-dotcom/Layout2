@@ -267,6 +267,7 @@ export default function SvgPreview({ conversion, conversions = [], projectId }) 
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
+  const lastPinchDist = useRef(null);
 
   const setScale = (newScale, cx, cy) => {
     if (!containerRef.current) return;
@@ -332,7 +333,55 @@ export default function SvgPreview({ conversion, conversions = [], projectId }) 
     };
   }, [svgContent, loading]);
 
+  const getPinchDistance = (e) => {
+    const [t1, t2] = [e.touches[0], e.touches[1]];
+    return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  };
+
+  const getPinchCenter = (e) => ({
+    x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+    y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+  });
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      isDragging.current = true;
+      dragStart.current = {
+        x: e.touches[0].clientX - transformRef.current.x,
+        y: e.touches[0].clientY - transformRef.current.y,
+      };
+      lastPinchDist.current = null;
+    } else if (e.touches.length === 2) {
+      isDragging.current = false;
+      lastPinchDist.current = getPinchDistance(e);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault();
+    if (e.touches.length === 2 && lastPinchDist.current !== null) {
+      const newDist = getPinchDistance(e);
+      const center = getPinchCenter(e);
+      const zoomFactor = newDist / lastPinchDist.current;
+      setScale(transformRef.current.scale * zoomFactor, center.x, center.y);
+      lastPinchDist.current = newDist;
+    } else if (e.touches.length === 1 && isDragging.current) {
+      transformRef.current = {
+        ...transformRef.current,
+        x: e.touches[0].clientX - dragStart.current.x,
+        y: e.touches[0].clientY - dragStart.current.y,
+      };
+      setTransform(transformRef.current);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    isDragging.current = false;
+    lastPinchDist.current = null;
+  };
+
   const handlePointerDown = (e) => {
+    if (e.pointerType === 'touch') return; // handled by touch events
     if (e.button === 0 || e.button === 1 || e.button === 2) {
       isDragging.current = true;
       dragStart.current = { x: e.clientX - transformRef.current.x, y: e.clientY - transformRef.current.y };
@@ -341,17 +390,19 @@ export default function SvgPreview({ conversion, conversions = [], projectId }) 
   };
 
   const handlePointerMove = (e) => {
+    if (e.pointerType === 'touch') return;
     if (isDragging.current) {
       transformRef.current = {
         ...transformRef.current,
         x: e.clientX - dragStart.current.x,
-        y: e.clientY - dragStart.current.y
+        y: e.clientY - dragStart.current.y,
       };
       setTransform(transformRef.current);
     }
   };
 
   const handlePointerUp = (e) => {
+    if (e.pointerType === 'touch') return;
     isDragging.current = false;
     containerRef.current.releasePointerCapture(e.pointerId);
   };
@@ -399,16 +450,19 @@ export default function SvgPreview({ conversion, conversions = [], projectId }) 
         linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)`,
         backgroundSize: '20px 20px'
       }}>
-        <div 
+        <div
           ref={containerRef}
           className="w-full h-full relative overflow-hidden"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          style={{ cursor: isDragging.current ? 'grabbing' : 'grab' }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{ cursor: isDragging.current ? 'grabbing' : 'grab', touchAction: 'none' }}
         >
-        <div className="absolute top-4 right-4 z-10 flex gap-2">
+        <div className="absolute top-3 right-3 z-10 flex gap-1.5 sm:gap-2">
           <ToolbarButton icon={<ZoomIn size={14} />} onClick={zoomIn} title="Zoom In" />
           <ToolbarButton icon={<ZoomOut size={14} />} onClick={zoomOut} title="Zoom Out" />
           <ToolbarButton icon={<Maximize size={14} />} onClick={centerView} title="Fit to Screen" />
@@ -539,7 +593,7 @@ function ToolbarButton({ icon, onClick, title }) {
     <button
       onClick={onClick}
       title={title}
-      className="w-6 h-6 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded shadow-lg transition-colors border border-zinc-700"
+      className="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-zinc-300 rounded shadow-lg transition-colors border border-zinc-700 touch-manipulation"
     >
       {icon}
     </button>

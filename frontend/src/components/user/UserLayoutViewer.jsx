@@ -131,8 +131,6 @@ const CadEditorWorkspace = dynamic(
 // ─────────────────────────────────────────────────────────────────────────────
 export default function UserLayoutViewer({ project, conversion }) {
   const [showPlotStatus, setShowPlotStatus] = useState(false);
-  const [selectedPlot,   setSelectedPlot]   = useState(null);
-  const [isDrawerOpen,   setIsDrawerOpen]   = useState(false);
   const [rotationDeg,    setRotationDeg]    = useState(0);
   const [currentZoom,    setCurrentZoom]    = useState(1);
 
@@ -197,46 +195,11 @@ export default function UserLayoutViewer({ project, conversion }) {
             readOnly={true}
             showPlotStatus={showPlotStatus}
             onZoomChange={(pct) => setCurrentZoom(pct)}
-            onUserViewerSelection={(plot) => {
-              setSelectedPlot(plot);
-              if (!plot) setIsDrawerOpen(false);
-            }}
           />
         </div>
 
         {/* ── Compass (outside rotation wrapper — always upright) ─────── */}
         <CompassControl rotation={rotationDeg} onResetNorth={resetNorth} />
-
-        {/* ── Floating zoom controls (outside rotation wrapper) ────────── */}
-        <div className="absolute bottom-6 right-4 z-50 flex flex-col items-center gap-1.5 pointer-events-auto select-none">
-          <div className="bg-zinc-900/85 backdrop-blur-md border border-zinc-700/50 rounded-lg px-2.5 py-1 text-[11px] font-semibold text-zinc-300 tabular-nums text-center min-w-[48px]">
-            {Math.round(currentZoom)}%
-          </div>
-          <button
-            onClick={zoomIn}
-            title="Zoom In"
-            aria-label="Zoom in"
-            className="w-10 h-10 bg-zinc-900/85 backdrop-blur-md border border-zinc-700/50 rounded-xl flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/90 active:scale-95 transition-all shadow-lg"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-          </button>
-          <button
-            onClick={zoomOut}
-            title="Zoom Out"
-            aria-label="Zoom out"
-            className="w-10 h-10 bg-zinc-900/85 backdrop-blur-md border border-zinc-700/50 rounded-xl flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/90 active:scale-95 transition-all shadow-lg"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-          </button>
-          <button
-            onClick={centerView}
-            title="Fit to screen"
-            aria-label="Fit to screen"
-            className="w-10 h-10 bg-zinc-900/85 backdrop-blur-md border border-zinc-700/50 rounded-xl flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/90 active:scale-95 transition-all shadow-lg"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-          </button>
-        </div>
 
       </div>
     </div>
