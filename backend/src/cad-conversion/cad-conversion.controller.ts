@@ -140,6 +140,11 @@ export class CadConversionController {
     return this.cadConversionService.update(+id, body);
   }
 
+  @Patch(':id/activate')
+  async activateLayout(@Param('id') id: string) {
+    return this.cadConversionService.activateLayout(+id);
+  }
+
   @Delete(':id')
   async remove(@Param('id') id: string) {
     return this.cadConversionService.remove(+id);

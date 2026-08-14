@@ -76,6 +76,7 @@ model CadConversion {
   mapLongitude     Float?
   mapRotation      Float?      @default(0)
   mapScale         Float?      @default(1)
+  isActive         Boolean     @default(false)
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
   amenityPlacements AmenityPlacement[]

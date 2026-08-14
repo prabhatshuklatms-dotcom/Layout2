@@ -1,22 +1,28 @@
 import React, { useRef, useState } from 'react';
 import { UploadCloud, Loader2 } from 'lucide-react';
 
+import { BASE_URL } from '@/lib/api';
+
 export default function UploadPanel({ projectId, onUploadStart, onUploadError }) {
   const fileInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     const ext = file.name.split('.').pop().toLowerCase();
     if (ext !== 'dwg' && ext !== 'dxf') {
       onUploadError('Only DWG and DXF files are supported.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     if (file.size > 100 * 1024 * 1024) {
       onUploadError('File size exceeds 100MB limit.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -30,7 +36,7 @@ export default function UploadPanel({ projectId, onUploadStart, onUploadError })
     }
 
     try {
-      const res = await fetch('http://localhost:5000/api/cad-conversion/upload', {
+      const res = await fetch(`${BASE_URL}/api/cad-conversion/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -40,11 +46,11 @@ export default function UploadPanel({ projectId, onUploadStart, onUploadError })
         throw new Error(errData.message || 'Upload failed');
       }
       
-      // Successfully uploaded
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      await res.json(); // Wait for json parsing to finish
     } catch (err) {
       onUploadError(err.message);
     } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
       setIsUploading(false);
     }
   };

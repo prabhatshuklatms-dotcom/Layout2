@@ -1,42 +1,37 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getCadProjects, createCadProject } from '@/lib/api';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchProjects, createProject } from '@/redux/slices/projectsSlice';
 import Swal from 'sweetalert2';
 
 export default function CadProjectList() {
-  const [projects, setProjects] = useState([]);
+  const dispatch = useDispatch();
+  const { items: projects, loading, isCreating } = useSelector(state => state.projects);
+  
   const [search, setSearch] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const router = useRouter();
 
-  const fetchProjects = useCallback(async () => {
-    try {
-      const data = await getCadProjects();
-      setProjects(data);
-    } catch (err) {
-      console.error(err);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    dispatch(fetchProjects());
+  }, [dispatch]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!newProjectName.trim()) return;
+    
     try {
-      const project = await createCadProject({ name: newProjectName });
-      setIsCreating(false);
+      const resultAction = await dispatch(createProject({ name: newProjectName })).unwrap();
+      setShowCreateForm(false);
       setNewProjectName('');
-      router.push(`/cad-conversion/${project.id}`);
+      router.push(`/cad-conversion/${resultAction.id}`);
     } catch (err) {
       console.error(err);
-      Swal.fire({ icon: 'error', title: 'Failed to create project', text: err.message, background: '#18181b', color: '#fff' });
+      Swal.fire({ icon: 'error', title: 'Failed to create project', text: err, background: '#18181b', color: '#fff' });
     }
   };
 
@@ -49,7 +44,7 @@ export default function CadProjectList() {
           CAD Conversion Projects
         </h1>
         <button 
-          onClick={() => setIsCreating(true)}
+          onClick={() => setShowCreateForm(true)}
           className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
         >
           Create Project
@@ -58,7 +53,7 @@ export default function CadProjectList() {
 
       <div className="flex-1 overflow-y-auto p-8">
         <div className="max-w-6xl mx-auto">
-          {isCreating && (
+          {showCreateForm && (
             <form onSubmit={handleCreate} className="mb-8 bg-zinc-900 p-6 rounded-lg border border-zinc-800 flex gap-4 items-end">
               <div className="flex-1">
                 <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Project Name</label>
@@ -71,10 +66,10 @@ export default function CadProjectList() {
                   placeholder="e.g. Phase 1 Architecture"
                 />
               </div>
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded font-medium transition-colors">
-                Create
+              <button type="submit" disabled={isCreating} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-6 py-2 rounded font-medium transition-colors">
+                {isCreating ? 'Creating...' : 'Create'}
               </button>
-              <button type="button" onClick={() => setIsCreating(false)} className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-2 rounded font-medium transition-colors">
+              <button type="button" onClick={() => setShowCreateForm(false)} disabled={isCreating} className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white px-6 py-2 rounded font-medium transition-colors">
                 Cancel
               </button>
             </form>

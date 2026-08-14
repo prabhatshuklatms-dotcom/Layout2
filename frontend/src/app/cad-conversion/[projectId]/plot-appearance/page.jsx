@@ -4,13 +4,16 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ColorPicker } from 'antd';
 import { Palette, Save, ArrowLeft, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { getProjectAppearanceSettings, createProjectAppearanceSettings, updateProjectAppearanceSettings } from '@/lib/api';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchAppearanceSettings, updateAppearanceSettings, createAppearanceSettings } from '@/redux/slices/appearanceSlice';
 
 export default function AppearanceSettingsPage({ params }) {
   const unwrappedParams = React.use(params);
   const { projectId } = unwrappedParams;
 
-  const [loading, setLoading] = useState(true);
+  const dispatch = useDispatch();
+  const { settings: globalSettings, loading, error: reduxError } = useSelector(state => state.appearance);
+
   const [saving, setSaving] = useState(false);
   const [isNew, setIsNew] = useState(true);
 
@@ -24,30 +27,26 @@ export default function AppearanceSettingsPage({ params }) {
   });
 
   useEffect(() => {
-    async function fetchSettings() {
-      try {
-        setLoading(true);
-        const data = await getProjectAppearanceSettings(projectId);
-        if (data) {
-          setSettings({
-            dimensionColor: data.dimensionColor || '#ffffff',
-            plotColor: data.plotColor || '#3B82F6',
-            plotLabelColor: data.plotLabelColor || '#ffffff'
-          });
-          setIsNew(false);
-        }
-      } catch (err) {
-        console.error('Failed to fetch settings', err);
-        setError('Failed to load appearance settings.');
-      } finally {
-        setLoading(false);
-      }
-    }
-
     if (projectId) {
-      fetchSettings();
+      dispatch(fetchAppearanceSettings(projectId)).unwrap()
+        .then(data => {
+          if (data) {
+            setSettings({
+              dimensionColor: data.dimensionColor || '#ffffff',
+              plotColor: data.plotColor || '#3B82F6',
+              plotLabelColor: data.plotLabelColor || '#ffffff'
+            });
+            setIsNew(false);
+          }
+        })
+        .catch(err => {
+          // If 404, it means no settings exist yet, which is fine (isNew = true).
+          if (err && !err.includes('404')) {
+            setError('Failed to load appearance settings.');
+          }
+        });
     }
-  }, [projectId]);
+  }, [projectId, dispatch]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -62,10 +61,10 @@ export default function AppearanceSettingsPage({ params }) {
 
     try {
       if (isNew) {
-        await createProjectAppearanceSettings(projectId, settings);
+        await dispatch(createAppearanceSettings({ projectId, data: settings })).unwrap();
         setIsNew(false);
       } else {
-        await updateProjectAppearanceSettings(projectId, settings);
+        await dispatch(updateAppearanceSettings({ projectId, data: settings })).unwrap();
       }
       setSuccessMessage('Appearance settings saved successfully!');
 
@@ -75,7 +74,7 @@ export default function AppearanceSettingsPage({ params }) {
       }, 3000);
     } catch (err) {
       console.error('Failed to save settings', err);
-      setError(err.message || 'Failed to save appearance settings.');
+      setError(err || 'Failed to save appearance settings.');
     } finally {
       setSaving(false);
     }

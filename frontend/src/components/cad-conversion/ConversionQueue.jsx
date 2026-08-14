@@ -3,7 +3,7 @@ import { CheckCircle2, Clock, XCircle, Loader2, Edit2, Trash2, Check, X, UploadC
 import { formatDistanceToNow } from 'date-fns';
 import Swal from 'sweetalert2';
 
-export default function ConversionQueue({ conversions, selectedId, onSelect, onDelete, onUpdate, onReupload }) {
+export default function ConversionQueue({ conversions, selectedId, onSelect, onDelete, onUpdate, onReupload, onActivate }) {
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
   const fileInputRef = useRef(null);
@@ -61,12 +61,18 @@ export default function ConversionQueue({ conversions, selectedId, onSelect, onD
     fileInputRef.current?.click();
   };
 
+  const handleActivateClick = (e, id) => {
+    e.stopPropagation();
+    if (onActivate) onActivate(id);
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file && uploadingId) {
       onReupload(uploadingId, file);
     }
-    e.target.value = null; // reset input
+    // ensure input is cleared so the same file can be selected again
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setUploadingId(null);
   };
 
@@ -122,14 +128,27 @@ export default function ConversionQueue({ conversions, selectedId, onSelect, onD
                 </div>
               )}
               <div className="text-xs text-zinc-500 mt-1 flex items-center gap-2">
-                <span>{formatDistanceToNow(new Date(conv.createdAt), { addSuffix: true })}</span>
+                <span className={conv.isActive ? "text-emerald-500 font-semibold" : "text-zinc-500"}>
+                  {conv.isActive ? "Active" : "Inactive"}
+                </span>
                 <span>•</span>
                 <span className="capitalize">{conv.status.toLowerCase()}</span>
+                <span>•</span>
+                <span>{formatDistanceToNow(new Date(conv.createdAt), { addSuffix: true })}</span>
               </div>
             </div>
             {/* Actions overlay — always visible on touch devices, hover-only on desktop */}
             {editingId !== conv.id && (
               <div className="absolute right-2 top-3 flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-zinc-900/90 backdrop-blur-sm rounded p-1">
+                {!conv.isActive && conv.status === 'SUCCESS' && (
+                  <button
+                    onClick={(e) => handleActivateClick(e, conv.id)}
+                    className="text-emerald-400 hover:text-emerald-300 active:text-emerald-300 p-2 sm:p-1.5 rounded hover:bg-zinc-800 active:bg-zinc-800 transition-colors touch-manipulation text-xs font-semibold uppercase tracking-wider"
+                    title="Set as Active Layout"
+                  >
+                    Activate
+                  </button>
+                )}
                 <button
                   onClick={(e) => handleReuploadClick(e, conv.id)}
                   className="text-zinc-400 hover:text-indigo-400 active:text-indigo-400 p-2 sm:p-1.5 rounded hover:bg-zinc-800 active:bg-zinc-800 transition-colors touch-manipulation"

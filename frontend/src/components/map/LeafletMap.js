@@ -35,7 +35,7 @@ const LeafletMap = forwardRef(function LeafletMap(
     onDrawComplete, onSelectBoundary, onMoveComplete,
     initialBounds, staticPreview, onLayoutDrop,
     layouts, onLayoutUpdate, plots, statuses, showPlotStatus,
-    projectConfig
+    projectConfig, selectedPlotId, onPlotSelect, appearanceSettings
   },
   ref,
 ) {
@@ -676,6 +676,9 @@ const LeafletMap = forwardRef(function LeafletMap(
             readOnly={staticPreview}
             isSelected={selectedLayoutId === layout.id}
             onSelect={() => setSelectedLayoutId(layout.id)}
+            selectedPlotId={selectedPlotId}
+            onPlotSelect={onPlotSelect}
+            appearanceSettings={appearanceSettings}
             onTransformChange={(newDraft) => {
               setDraftTransforms(prev => ({
                 ...prev,

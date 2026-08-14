@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { getAmenities, deleteAmenity } from '@/lib/api';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchAmenities, deleteAmenity } from '@/redux/slices/amenitiesSlice';
 import { Plus, Edit2, Trash2, Image as ImageIcon, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import Swal from 'sweetalert2';
@@ -20,42 +21,22 @@ function useDebounce(value, delay) {
 }
 
 export default function AmenitiesMasterPage() {
-  const [amenities, setAmenities] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const dispatch = useDispatch();
+  const { items: amenities, loading, totalPages } = useSelector(state => state.amenities);
   
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const limit = 10;
   
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 500);
 
-  const fetchAmenities = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await getAmenities({
-        page: page,
-        limit,
-        search: debouncedSearch
-      });
-      if (res && res.data) {
-        setAmenities(res.data);
-        setTotalPages(res.pagination?.totalPages || 1);
-      } else {
-        // Fallback if the backend somehow returns an array instead of paginated structure
-        setAmenities(Array.isArray(res) ? res : []);
-        setTotalPages(1);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, debouncedSearch]);
-
   useEffect(() => {
-    fetchAmenities();
-  }, [fetchAmenities]);
+    dispatch(fetchAmenities({
+      page: page,
+      limit,
+      search: debouncedSearch
+    }));
+  }, [dispatch, page, limit, debouncedSearch]);
 
   // Reset to page 1 when search changes
   useEffect(() => {
@@ -77,9 +58,8 @@ export default function AmenitiesMasterPage() {
 
     if (result.isConfirmed) {
       try {
-        await deleteAmenity(id);
+        await dispatch(deleteAmenity(id)).unwrap();
         Swal.fire({ title: 'Deleted!', text: 'Amenity has been deleted.', icon: 'success', background: '#18181b', color: '#fff' });
-        fetchAmenities();
       } catch (err) {
         Swal.fire({ title: 'Error', text: 'Failed to delete amenity', icon: 'error', background: '#18181b', color: '#fff' });
       }

@@ -2,7 +2,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useDispatch, useSelector } from 'react-redux';
 import { getCadProject } from '@/lib/api';
+import { 
+  fetchConversions, 
+  deleteConversion, 
+  renameConversion, 
+  activateConversion 
+} from '@/redux/slices/conversionsSlice';
 import UploadPanel from './UploadPanel';
 import ConversionQueue from './ConversionQueue';
 import SvgPreview from './SvgPreview';
@@ -18,8 +25,10 @@ const TABS = {
 };
 
 export default function CadConversionStudio({ projectId }) {
+  const dispatch = useDispatch();
   const [project, setProject] = useState(null);
-  const [conversions, setConversions] = useState([]);
+  
+  const { items: conversions } = useSelector(state => state.conversions);
   const [selectedConversionId, setSelectedConversionId] = useState(null);
   const [logs, setLogs] = useState([]);
 
@@ -39,47 +48,34 @@ export default function CadConversionStudio({ projectId }) {
     setLogs(prev => [...prev, { time: new Date(), message, type }]);
   }, []);
 
-  const fetchConversions = useCallback(async () => {
-    try {
-      const url = projectId
-        ? `http://localhost:5000/api/cad-conversion?projectId=${projectId}`
-        : 'http://localhost:5000/api/cad-conversion';
-      const res = await fetch(url);
-      if (res.ok) setConversions(await res.json());
-    } catch (_) {}
-  }, [projectId]);
+  const loadConversions = useCallback(() => {
+    if (projectId) {
+      dispatch(fetchConversions(projectId));
+    } else {
+      dispatch(fetchConversions());
+    }
+  }, [dispatch, projectId]);
 
   useEffect(() => {
-    fetchConversions();
-    const interval = setInterval(fetchConversions, 3000);
+    loadConversions();
+    const interval = setInterval(loadConversions, 3000);
     return () => clearInterval(interval);
-  }, [fetchConversions]);
+  }, [loadConversions]);
 
   const selectedConversion = conversions.find(c => c.id === selectedConversionId) || null;
 
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/cad-conversion/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setConversions(prev => prev.filter(c => c.id !== id));
-        if (selectedConversionId === id) setSelectedConversionId(null);
-        addLog(`Conversion ${id} deleted`, 'info');
-      }
+      await dispatch(deleteConversion(id)).unwrap();
+      if (selectedConversionId === id) setSelectedConversionId(null);
+      addLog(`Conversion ${id} deleted`, 'info');
     } catch (err) { addLog(`Failed to delete: ${err}`, 'error'); }
   };
 
   const handleUpdate = async (id, newName) => {
     try {
-      const res = await fetch(`http://localhost:5000/api/cad-conversion/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ originalFileName: newName }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setConversions(prev => prev.map(c => c.id === id ? { ...c, originalFileName: updated.originalFileName } : c));
-        addLog(`Conversion ${id} renamed to ${newName}`, 'info');
-      }
+      await dispatch(renameConversion({ id, newName })).unwrap();
+      addLog(`Conversion ${id} renamed to ${newName}`, 'info');
     } catch (err) { addLog(`Failed to update: ${err}`, 'error'); }
   };
 
@@ -88,26 +84,38 @@ export default function CadConversionStudio({ projectId }) {
       addLog(`Uploading new file for conversion ${id}...`, 'info');
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`http://localhost:5000/api/cad-conversion/${id}/upload`, {
+      const { BASE_URL } = await import('@/lib/api');
+      const res = await fetch(`${BASE_URL}/api/cad-conversion/${id}/upload`, {
         method: 'POST', body: formData,
       });
       if (res.ok) {
         addLog(`File successfully re-uploaded and queued for conversion ${id}`, 'info');
-        fetchConversions();
+        loadConversions();
       } else {
         addLog(`Failed to re-upload for conversion ${id}`, 'error');
       }
     } catch (err) { addLog(`Error re-uploading: ${err}`, 'error'); }
   };
 
+  const handleActivate = async (id) => {
+    try {
+      addLog(`Activating layout ${id}...`, 'info');
+      await dispatch(activateConversion(id)).unwrap();
+      addLog(`Layout ${id} activated successfully`, 'info');
+      loadConversions();
+    } catch (err) {
+      addLog(`Failed to activate: ${err}`, 'error');
+    }
+  };
+
   // ── Sidebar content (shared between drawer + desktop panel) ────────────────
-  const SidebarContent = () => (
+  const sidebarContent = (
     <>
       <div className="p-4 border-b border-zinc-800">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Upload CAD</h2>
         <UploadPanel
           projectId={projectId}
-          onUploadStart={() => { addLog('Upload initiated', 'info'); fetchConversions(); }}
+          onUploadStart={() => { addLog('Upload initiated', 'info'); loadConversions(); }}
           onUploadError={(err) => addLog(`Upload failed: ${err}`, 'error')}
         />
       </div>
@@ -123,6 +131,7 @@ export default function CadConversionStudio({ projectId }) {
           onDelete={handleDelete}
           onUpdate={handleUpdate}
           onReupload={handleReupload}
+          onActivate={handleActivate}
         />
       </div>
     </>
@@ -208,7 +217,7 @@ export default function CadConversionStudio({ projectId }) {
 
           {/* Content — hide when desktop-collapsed */}
           <div className={`flex flex-col flex-1 overflow-hidden ${sidebarCollapsed ? 'xl:hidden' : ''}`}>
-            <SidebarContent />
+            {sidebarContent}
           </div>
 
           {/* Collapsed icons — desktop only */}
@@ -216,7 +225,7 @@ export default function CadConversionStudio({ projectId }) {
             <div className="hidden xl:flex flex-col items-center gap-4 pt-4">
               <button
                 className="text-zinc-400 hover:text-white p-2 rounded hover:bg-zinc-800"
-                title="Uploads &amp; Queue"
+                title="Uploads & Queue"
                 onClick={() => setSidebarCollapsed(false)}
               >
                 <UploadCloud size={18} />

@@ -30,3 +30,5 @@ async function bootstrap() {
   console.log("Backend running at http://localhost:5000")
 }
 bootstrap();
+
+// Trigger restart

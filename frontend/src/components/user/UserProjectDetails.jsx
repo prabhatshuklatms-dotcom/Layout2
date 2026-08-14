@@ -25,10 +25,10 @@ export default function UserProjectDetails({ projectId }) {
         
         setProject(projectData);
         
-        // Find the first successful conversion to display as the layout
+        // Find the active layout to display
         if (conversionsData && conversionsData.length > 0) {
-          const successConversion = conversionsData.find(c => c.status === 'SUCCESS') || conversionsData[0];
-          setActiveConversion(successConversion);
+          const activeConversion = conversionsData.find(c => c.isActive);
+          setActiveConversion(activeConversion || null);
         }
       } catch (err) {
         console.error('Failed to fetch project details:', err);

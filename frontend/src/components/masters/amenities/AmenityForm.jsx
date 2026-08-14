@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { createAmenity, updateAmenity, uploadAmenityIcon } from '@/lib/api';
+import { useDispatch } from 'react-redux';
+import { createAmenity, updateAmenity } from '@/redux/slices/amenitiesSlice';
+import { uploadAmenityIcon } from '@/lib/api';
 import { Image as ImageIcon, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -8,6 +10,7 @@ import Swal from 'sweetalert2';
 
 export default function AmenityForm({ initialData = null }) {
   const router = useRouter();
+  const dispatch = useDispatch();
   const isEditing = !!initialData;
 
   const [formData, setFormData] = useState({
@@ -49,9 +52,9 @@ export default function AmenityForm({ initialData = null }) {
     setSubmitting(true);
     try {
       if (isEditing) {
-        await updateAmenity(initialData.id, formData);
+        await dispatch(updateAmenity({ id: initialData.id, body: formData })).unwrap();
       } else {
-        await createAmenity(formData);
+        await dispatch(createAmenity(formData)).unwrap();
       }
       router.push('/masters/amenities');
     } catch (err) {

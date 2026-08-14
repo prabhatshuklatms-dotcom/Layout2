@@ -1,4 +1,4 @@
-export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+export const BASE_URL = 'http://localhost:5000';
 
 async function request(path, options = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -83,6 +83,12 @@ export async function updateCadConversion(id, data) {
   });
 }
 
+export async function activateCadConversion(id) {
+  return request(`/api/cad-conversion/${id}/activate`, {
+    method: 'PATCH'
+  });
+}
+
 // ─── Plot Statuses (DEPRECATED: see Project Plot Statuses below) ─────────────
 
 
@@ -100,7 +106,7 @@ export async function getProjectPlots(projectId, options = {}) {
   if (options.assignment) params.append('assignment', options.assignment);
   if (options.sortBy) params.append('sortBy', options.sortBy);
   if (options.sortOrder) params.append('sortOrder', options.sortOrder);
-  
+
   const queryString = params.toString();
   const url = `/api/projects/${projectId}/plots${queryString ? `?${queryString}` : ''}`;
   return request(url).then(res => options.pagination === false && res.data ? res.data : res);
@@ -152,7 +158,7 @@ export async function getAmenities(options = {}) {
     if (options.limit) query.append('limit', options.limit.toString());
   }
   if (options.search) query.append('search', options.search);
-  
+
   const queryString = query.toString();
   return request(`/api/amenities${queryString ? `?${queryString}` : ''}`).then(res => options.pagination === false && res.data ? res.data : res);
 }
@@ -182,12 +188,12 @@ export async function deleteAmenity(id) {
 export async function uploadAmenityIcon(file) {
   const formData = new FormData();
   formData.append('icon', file);
-  
+
   const res = await fetch(`${BASE_URL}/api/amenities/upload`, {
     method: 'POST',
     body: formData, // Fetch automatically sets correct multipart boundary
   });
-  
+
   if (!res.ok) throw new Error('Upload failed');
   return res.json();
 }
@@ -228,7 +234,7 @@ export async function getProjectPlotStatuses(projectId, params = {}) {
   }
   if (params.search) query.append('search', params.search);
   const queryString = query.toString();
-  
+
   const url = `/api/plot-statuses/project/${projectId}${queryString ? `?${queryString}` : ''}`;
   return request(url).then(res => params.pagination === false && res.data ? res.data : res);
 }

@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createProjectPlotStatus, updateProjectPlotStatus } from '@/lib/api';
+import { useDispatch } from 'react-redux';
+import { createPlotStatus, updatePlotStatus } from '@/redux/slices/plotStatusesSlice';
 import { ArrowLeft } from 'lucide-react';
 import { ColorPicker, ConfigProvider, theme } from 'antd';
 import Link from 'next/link';
@@ -9,6 +10,7 @@ import Swal from 'sweetalert2';
 
 export default function PlotStatusForm({ projectId, statusId, initialData, currentMaxOrder }) {
   const router = useRouter();
+  const dispatch = useDispatch();
   const isEditing = !!statusId;
 
   const emptyForm = { name: '', fillColor: '#000000', isActive: true };
@@ -32,9 +34,9 @@ export default function PlotStatusForm({ projectId, statusId, initialData, curre
       const payload = { ...formData };
 
       if (isEditing) {
-        await updateProjectPlotStatus(projectId, statusId, payload);
+        await dispatch(updatePlotStatus({ projectId, id: statusId, body: payload })).unwrap();
       } else {
-        await createProjectPlotStatus(projectId, payload);
+        await dispatch(createPlotStatus({ projectId, body: payload })).unwrap();
       }
       
       router.push(`/cad-conversion/${projectId}/plot-statuses`);
@@ -42,7 +44,7 @@ export default function PlotStatusForm({ projectId, statusId, initialData, curre
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: err.message || 'Failed to save plot status'
+        text: err || 'Failed to save plot status'
       });
     } finally {
       setLoading(false);

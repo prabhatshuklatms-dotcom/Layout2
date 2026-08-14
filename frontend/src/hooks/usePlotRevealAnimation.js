@@ -18,19 +18,12 @@ export default function usePlotRevealAnimation(svgRef, shapes, layoutRevealKey) 
       const svgEl = svgRef.current.tagName.toLowerCase() === 'svg' ? svgRef.current : svgRef.current.querySelector('svg');
       if (!svgEl) return;
 
-      console.log(`[PlotReveal] layout key: ${layoutRevealKey}`);
-      console.log(`[PlotReveal] initialization requested`);
-
       // Check if we already initialized this specific layout
       if (lastRevealKeyRef.current === layoutRevealKey) {
-        console.log(`[PlotReveal] already initialized: ${layoutRevealKey}`);
         return;
       }
 
-      console.log(`[PlotReveal] SVG mounted`);
-
       const plotNodes = Array.from(svgEl.querySelectorAll('[data-plot-id]'));
-      console.log(`[PlotReveal] plot count: ${plotNodes.length}`);
       
       if (plotNodes.length === 0) return;
 
@@ -66,13 +59,8 @@ export default function usePlotRevealAnimation(svgRef, shapes, layoutRevealKey) 
       // Filter out invalid nodes (though all should have data-plot-id from the selector)
       const validPlots = plotsWithGeometry.filter(p => p.id);
       
-      console.log(`[PlotReveal] plot IDs: ${validPlots.map(p => p.id).join(', ')}`);
-      console.log(`[PlotReveal] calculated X positions: ${validPlots.map(p => Math.round(p.centerX)).join(', ')}`);
-
       // Sort by actual X ascending (LEFT -> RIGHT)
       validPlots.sort((a, b) => a.centerX - b.centerX);
-      
-      console.log(`[PlotReveal] sorted IDs: ${validPlots.map(p => p.id).join(', ')}`);
 
       const labelsFound = [];
       let animationsStarted = 0;
@@ -112,14 +100,11 @@ export default function usePlotRevealAnimation(svgRef, shapes, layoutRevealKey) 
         }
       });
 
-      console.log(`[PlotReveal] labels found: ${labelsFound.length}`);
-      console.log(`[PlotReveal] animations started: ${animationsStarted}`);
-
       // Wait for the longest animation to finish before logging complete
       if (validPlots.length > 0) {
         const maxDuration = ((validPlots.length - 1) * 30) + 220;
         setTimeout(() => {
-          console.log(`[PlotReveal] animation complete`);
+          // Animation complete
         }, maxDuration + 50);
       }
     };

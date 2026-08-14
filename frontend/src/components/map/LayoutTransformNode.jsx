@@ -48,7 +48,10 @@ export default function LayoutTransformNode({
   statuses,
   showPlotStatus,
   projectConfig,
-  readOnly = false
+  readOnly = false,
+  selectedPlotId,
+  onPlotSelect,
+  appearanceSettings
 }) {
   const [imgSize, setImgSize] = useState(null);
   const [svgUrl, setSvgUrl] = useState(null);
@@ -86,14 +89,15 @@ export default function LayoutTransformNode({
         }
       };
       
-      const resolvedFill = resolvePlotFill(shape, plots, statuses, showPlotStatus);
+      const isPlotSelected = selectedPlotId === node.getAttribute('data-plot-id');
+      const resolvedFill = resolvePlotFill(shape, plots, statuses, showPlotStatus, false, appearanceSettings, isPlotSelected, readOnly);
       if (resolvedFill !== null) {
         node.setAttribute('fill', resolvedFill);
       } else {
         node.removeAttribute('fill');
       }
     });
-  }, [showPlotStatus, plots, statuses, svgRaw]);
+  }, [showPlotStatus, plots, statuses, svgRaw, selectedPlotId, appearanceSettings, readOnly]);
   
   // Mutable interaction state
   const stateRef = useRef({
@@ -525,11 +529,62 @@ export default function LayoutTransformNode({
         .cad-viewer-global-styles svg ellipse:not([stroke="none"]):not([stroke="transparent"]):not([filter]):not([data-custom-color="true"]) {
           stroke: var(--layout-line-color) !important;
         }
+
+        ${selectedPlotId ? `
+        .cad-viewer-global-styles svg path,
+        .cad-viewer-global-styles svg polygon,
+        .cad-viewer-global-styles svg polyline,
+        .cad-viewer-global-styles svg rect,
+        .cad-viewer-global-styles svg circle,
+        .cad-viewer-global-styles svg ellipse {
+          opacity: 0.25;
+          transition: opacity 200ms ease;
+        }
+        
+        .cad-viewer-global-styles svg [data-plot-id="${selectedPlotId}"] {
+          opacity: 1 !important;
+          transition: opacity 200ms ease;
+        }
+
+        .cad-viewer-global-styles svg [data-plot-id="${selectedPlotId}"] path,
+        .cad-viewer-global-styles svg [data-plot-id="${selectedPlotId}"] polygon,
+        .cad-viewer-global-styles svg [data-plot-id="${selectedPlotId}"] polyline,
+        .cad-viewer-global-styles svg [data-plot-id="${selectedPlotId}"] rect,
+        .cad-viewer-global-styles svg [data-plot-id="${selectedPlotId}"] circle,
+        .cad-viewer-global-styles svg [data-plot-id="${selectedPlotId}"] ellipse {
+          opacity: 1 !important;
+          transition: opacity 200ms ease;
+        }
+        ` : `
+        .cad-viewer-global-styles svg path,
+        .cad-viewer-global-styles svg polygon,
+        .cad-viewer-global-styles svg polyline,
+        .cad-viewer-global-styles svg rect,
+        .cad-viewer-global-styles svg circle,
+        .cad-viewer-global-styles svg ellipse {
+          transition: opacity 200ms ease;
+        }
+        `}
+
+        .cad-viewer-global-styles svg [data-plot-id] {
+          pointer-events: auto;
+          cursor: pointer;
+        }
       `}</style>
       <div 
         ref={svgContainerRef}
         dangerouslySetInnerHTML={{ __html: svgRaw }}
         style={{ width: '100%', height: '100%', opacity: 0.85, pointerEvents: 'none', position: 'absolute', top: 0, left: 0 }} 
+        onClick={(e) => {
+          if (!onPlotSelect) return;
+          const target = e.target;
+          const plotNode = target.closest('[data-plot-id]');
+          if (plotNode) {
+            onPlotSelect(plotNode.getAttribute('data-plot-id'));
+          } else {
+            onPlotSelect(null);
+          }
+        }}
       />
       {/* Live labels overlay — same component as the editor, reads plot DOM from svgContainerRef */}
       {plots && plots.length > 0 && svgRaw && (

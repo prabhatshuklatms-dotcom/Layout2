@@ -12,6 +12,16 @@ export class CadConversionService {
   ) { }
 
   async create(data: any) {
+    if (data.projectId) {
+      const existingActive = await this.prisma.cadConversion.findFirst({
+        where: { projectId: data.projectId, isActive: true }
+      });
+      if (!existingActive) {
+        data.isActive = true;
+      } else {
+        data.isActive = false;
+      }
+    }
     return this.prisma.cadConversion.create({ data });
   }
 
@@ -37,6 +47,27 @@ export class CadConversionService {
 
   async remove(id: number) {
     return this.prisma.cadConversion.delete({ where: { id } });
+  }
+
+  async activateLayout(id: number) {
+    return this.prisma.$transaction(async (prisma) => {
+      // 1. Find the layout
+      const layout = await prisma.cadConversion.findUnique({ where: { id } });
+      if (!layout) throw new NotFoundException('Layout not found');
+      if (!layout.projectId) throw new NotFoundException('Layout is not associated with any project');
+
+      // 2. Deactivate all layouts for this project
+      await prisma.cadConversion.updateMany({
+        where: { projectId: layout.projectId },
+        data: { isActive: false }
+      });
+
+      // 3. Activate the requested layout
+      return prisma.cadConversion.update({
+        where: { id },
+        data: { isActive: true }
+      });
+    });
   }
 
   /**

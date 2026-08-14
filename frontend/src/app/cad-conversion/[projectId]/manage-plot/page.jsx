@@ -1,6 +1,9 @@
 'use client';
 import { useState, useEffect, use } from 'react';
-import { getProjectPlots, deleteProjectPlot, getProjectPlotStatuses, getCadProject, updateProjectPlotAssignment } from '@/lib/api';
+import { useDispatch, useSelector } from 'react-redux';
+import { getProjectPlotStatuses, getCadProject } from '@/lib/api';
+import { fetchPlots, deletePlot, updatePlotAssignment } from '@/redux/slices/plotsSlice';
+import { fetchProjectById } from '@/redux/slices/projectsSlice';
 import { Plus, Edit2, Trash2, Search, Filter, ArrowLeft } from 'lucide-react';
 import { getContrastYIQ } from '@/lib/utils';
 import { PLOT_TYPE_CONFIG } from '@/lib/plotTypeConfig';
@@ -15,24 +18,21 @@ export default function ProjectPlotsPage({ params }) {
   const searchParams = useSearchParams();
   const editorId = searchParams.get('editorId');
   
-  const [plots, setPlots] = useState([]);
+  const dispatch = useDispatch();
+  const { items: plots, loading, total: totalRecords, totalPages } = useSelector(state => state.plots);
+  const { selectedProject: project } = useSelector(state => state.projects);
+  
   const [statuses, setStatuses] = useState([]);
-  const [project, setProject] = useState(null);
-  const [loading, setLoading] = useState(true);
   
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   
-  // Keep local filters but note they only apply to the current page 
-  // since backend filtering for these wasn't explicitly requested.
   const [filterStatus, setFilterStatus] = useState('');
   const [filterAssignment, setFilterAssignment] = useState('');
   
   const [sortConfig, setSortConfig] = useState({ key: 'plotNumber', direction: 'asc' });
   
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const limit = 10;
 
   // Debounce search
@@ -46,26 +46,17 @@ export default function ProjectPlotsPage({ params }) {
 
   // Fetch initial project & statuses
   useEffect(() => {
-    Promise.all([
-      getProjectPlotStatuses(projectId, { pagination: false }),
-      getCadProject(projectId)
-    ])
-    .then(([statusesData, projectData]) => {
-      setStatuses(statusesData);
-      setProject(projectData);
-    })
-    .catch(console.error);
-  }, [projectId]);
+    dispatch(fetchProjectById(projectId));
+    getProjectPlotStatuses(projectId, { pagination: false })
+      .then(setStatuses)
+      .catch(console.error);
+  }, [projectId, dispatch]);
 
   // Fetch paginated plots
   useEffect(() => {
-    fetchPlots();
-  }, [projectId, currentPage, debouncedSearch, filterStatus, filterAssignment, sortConfig]);
-
-  const fetchPlots = async () => {
-    try {
-      setLoading(true);
-      const res = await getProjectPlots(projectId, { 
+    dispatch(fetchPlots({
+      projectId,
+      options: {
         page: currentPage, 
         limit, 
         search: debouncedSearch,
@@ -73,24 +64,9 @@ export default function ProjectPlotsPage({ params }) {
         assignment: filterAssignment || undefined,
         sortBy: sortConfig.key,
         sortOrder: sortConfig.direction
-      });
-      
-      // Handle the new response format or fallback to array if unpaginated (should be paginated here)
-      if (res && res.pagination) {
-        setPlots(res.data);
-        setTotalRecords(res.pagination.total);
-        setTotalPages(res.pagination.totalPages);
-      } else if (Array.isArray(res)) {
-        setPlots(res);
-        setTotalRecords(res.length);
-        setTotalPages(Math.ceil(res.length / limit));
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    }));
+  }, [projectId, currentPage, debouncedSearch, filterStatus, filterAssignment, sortConfig, dispatch, limit]);
 
   const handleDelete = async (id) => {
     const result = await Swal.fire({
@@ -107,9 +83,8 @@ export default function ProjectPlotsPage({ params }) {
 
     if (result.isConfirmed) {
       try {
-        await deleteProjectPlot(projectId, id);
+        await dispatch(deletePlot({ projectId, plotId: id })).unwrap();
         Swal.fire({ title: 'Deleted!', text: 'Plot has been deleted.', icon: 'success', background: '#18181b', color: '#fff' });
-        fetchPlots();
       } catch (err) {
         Swal.fire({ title: 'Error', text: 'Failed to delete plot', icon: 'error', background: '#18181b', color: '#fff' });
       }
@@ -130,18 +105,13 @@ export default function ProjectPlotsPage({ params }) {
             if (!value) return 'You need to write something!';
           }
         });
-        if (!manualId) {
-          setPlots([...plots]);
-          return;
-        }
+        if (!manualId) return;
         cadRegionId = manualId;
       }
-      setPlots(prev => prev.map(p => p.id === plot.id ? { ...p, cadRegionId } : p));
-      await updateProjectPlotAssignment(projectId, plot.id, { cadRegionId });
+      await dispatch(updatePlotAssignment({ projectId, plotId: plot.id, assignmentData: { cadRegionId } })).unwrap();
       Swal.fire({ icon: 'success', title: 'Success', text: 'Assignment updated successfully.', timer: 2000, showConfirmButton: false });
     } catch (error) {
       console.error(error);
-      fetchPlots();
       Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to update assignment.' });
     }
   };

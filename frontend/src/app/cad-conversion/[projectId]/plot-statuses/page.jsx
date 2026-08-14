@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect, use } from 'react';
-import { getProjectPlotStatuses, deleteProjectPlotStatus, getCadProject } from '@/lib/api';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchPlotStatuses, deletePlotStatus } from '@/redux/slices/plotStatusesSlice';
+import { fetchProjectById } from '@/redux/slices/projectsSlice';
 import { Plus, Edit2, Trash2, ArrowLeft, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -14,16 +16,14 @@ export default function ProjectPlotStatusesPage({ params }) {
   const editorId = searchParams.get('editorId');
   const router = useRouter();
   
-  const [statuses, setStatuses] = useState([]);
-  const [project, setProject] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const dispatch = useDispatch();
+  const { items: statuses, loading, totalRecords, totalPages } = useSelector(state => state.plotStatuses);
+  const { selectedProject: project } = useSelector(state => state.projects);
   
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const limit = 10;
 
   useEffect(() => {
@@ -35,39 +35,19 @@ export default function ProjectPlotStatusesPage({ params }) {
   }, [search]);
 
   useEffect(() => {
-    getCadProject(projectId)
-      .then(setProject)
-      .catch(console.error);
-  }, [projectId]);
+    dispatch(fetchProjectById(projectId));
+  }, [projectId, dispatch]);
 
   useEffect(() => {
-    fetchData();
-  }, [projectId, currentPage, debouncedSearch]);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const res = await getProjectPlotStatuses(projectId, {
+    dispatch(fetchPlotStatuses({
+      projectId,
+      params: {
         page: currentPage,
         limit,
         search: debouncedSearch
-      });
-      
-      if (res && res.pagination) {
-        setStatuses(res.data);
-        setTotalRecords(res.pagination.total);
-        setTotalPages(res.pagination.totalPages);
-      } else if (Array.isArray(res)) {
-        setStatuses(res);
-        setTotalRecords(res.length);
-        setTotalPages(Math.ceil(res.length / limit));
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    }));
+  }, [projectId, currentPage, debouncedSearch, dispatch, limit]);
 
   const handleDelete = async (id, name) => {
     const result = await Swal.fire({
@@ -84,11 +64,10 @@ export default function ProjectPlotStatusesPage({ params }) {
 
     if (result.isConfirmed) {
       try {
-        await deleteProjectPlotStatus(projectId, id);
+        await dispatch(deletePlotStatus({ projectId, id })).unwrap();
         Swal.fire({ title: 'Deleted!', text: 'Plot status has been deleted.', icon: 'success', background: '#18181b', color: '#fff' });
-        fetchData();
       } catch (err) {
-        Swal.fire({ title: 'Error', text: err.message || 'Failed to delete plot status', icon: 'error', background: '#18181b', color: '#fff' });
+        Swal.fire({ title: 'Error', text: err || 'Failed to delete plot status', icon: 'error', background: '#18181b', color: '#fff' });
       }
     }
   };

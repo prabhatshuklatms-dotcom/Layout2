@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { getCadProject, getProjectBoundaries, getCadConversions, getProjectPlots, getProjectPlotStatuses } from '@/lib/api';
+import { getCadProject, getProjectBoundaries, getCadConversions, getProjectPlots, getProjectPlotStatuses, getProjectAppearanceSettings } from '@/lib/api';
 import UserProjectLoading from './UserProjectLoading';
 import UserViewerToolbar from './UserViewerToolbar';
 import Link from 'next/link';
@@ -15,28 +15,32 @@ export default function UserProjectMap({ projectId }) {
   const [activeConversion, setActiveConversion] = useState(null);
   const [plots, setPlots] = useState([]);
   const [statuses, setStatuses] = useState([]);
+  const [appearanceSettings, setAppearanceSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
   const mapRef = useRef(null);
   const [currentZoom, setCurrentZoom] = useState(1); // Standardized to 1 for toolbar display, Leaflet zoom is handled natively
   const [showPlotStatus, setShowPlotStatus] = useState(false);
+  const [selectedPlotId, setSelectedPlotId] = useState(null);
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
-        const [projectData, boundsData, conversionsData, plotsData, statusesData] = await Promise.all([
+        const [projectData, boundsData, conversionsData, plotsData, statusesData, appearanceData] = await Promise.all([
           getCadProject(projectId),
           getProjectBoundaries(projectId),
           getCadConversions(projectId),
           getProjectPlots(projectId, { pagination: false }),
-          getProjectPlotStatuses(projectId, { pagination: false })
+          getProjectPlotStatuses(projectId, { pagination: false }),
+          getProjectAppearanceSettings(projectId).catch(() => null)
         ]);
         
         setProject(projectData);
         if (plotsData) setPlots(plotsData);
         if (statusesData) setStatuses(statusesData);
+        if (appearanceData) setAppearanceSettings(appearanceData);
         
         if (boundsData && boundsData.length > 0) {
           const parsedBounds = boundsData.map(b => {
@@ -50,8 +54,8 @@ export default function UserProjectMap({ projectId }) {
         }
 
         if (conversionsData && conversionsData.length > 0) {
-          const successConversion = conversionsData.find(c => c.status === 'SUCCESS') || conversionsData[0];
-          setActiveConversion(successConversion);
+          const activeConversion = conversionsData.find(c => c.isActive);
+          setActiveConversion(activeConversion || null);
         }
       } catch (err) {
         console.error('Failed to fetch map details:', err);
@@ -129,7 +133,7 @@ export default function UserProjectMap({ projectId }) {
         onTogglePlotStatus={() => setShowPlotStatus(!showPlotStatus)}
       />
 
-      <div className="flex-1 w-full h-full">
+        <div className="flex-1 w-full h-full">
         {boundaries.length > 0 ? (
           <LeafletMap
             ref={mapRef}
@@ -145,6 +149,9 @@ export default function UserProjectMap({ projectId }) {
             statuses={statuses}
             showPlotStatus={showPlotStatus}
             projectConfig={project}
+            selectedPlotId={selectedPlotId}
+            onPlotSelect={setSelectedPlotId}
+            appearanceSettings={appearanceSettings}
             className="w-full h-full"
           />
         ) : (
