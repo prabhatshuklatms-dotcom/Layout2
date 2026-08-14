@@ -14,6 +14,7 @@ export default function usePlotRevealAnimation(svgRef, shapes, layoutRevealKey) 
     let raf1, raf2;
     
     const initializeReveal = () => {
+      if (!svgRef.current) return;
       const svgEl = svgRef.current.tagName.toLowerCase() === 'svg' ? svgRef.current : svgRef.current.querySelector('svg');
       if (!svgEl) return;
 

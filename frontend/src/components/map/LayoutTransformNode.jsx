@@ -140,13 +140,16 @@ export default function LayoutTransformNode({
         try {
           const parser = new DOMParser();
           const doc = parser.parseFromString(displaySvgStr, 'image/svg+xml');
-          const tools = doc.querySelectorAll('[data-custom-color="true"]');
+          const tools = doc.querySelectorAll('[vector-effect="non-scaling-stroke"], [data-custom-color="true"]');
           tools.forEach(el => {
-            el.removeAttribute('vector-effect');
+            let sw = parseFloat(el.getAttribute('stroke-width'));
+            if (isNaN(sw)) sw = 2; // Default stroke width
+            const currentStyle = el.getAttribute('style') || '';
+            el.setAttribute('style', `${currentStyle}; stroke-width: calc(${sw}px / var(--combined-scale)) !important;`);
           });
           displaySvgStr = new XMLSerializer().serializeToString(doc);
         } catch (e) {
-          console.error("Error applying tool rendering overrides to Map SVG", e);
+          console.error("Error applying stroke-width scaling to SVG", e);
         }
 
         setSvgRaw(displaySvgStr);

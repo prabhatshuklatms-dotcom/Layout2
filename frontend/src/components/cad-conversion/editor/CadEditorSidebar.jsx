@@ -199,6 +199,12 @@ export default function CadEditorSidebar({ isMobileOpen, onCloseMobile, projectI
           >
             Manage Plot Statuses
           </Link>
+          <Link
+            href={`/cad-conversion/${projectId}/plot-appearance`}
+            className="w-full flex items-center justify-center py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded transition-colors"
+          >
+            Plot Appearance
+          </Link>
         </div>
 
         {/* ── Amenities ─────────────────────────────────────────────────────── */}

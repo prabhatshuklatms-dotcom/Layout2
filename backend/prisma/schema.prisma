@@ -38,6 +38,7 @@ model CadProject {
   amenityPlacements AmenityPlacement[]
   plotStatuses PlotStatus[]
   boundaries  ProjectBoundary[]
+  appearanceSettings ProjectAppearanceSettings?
 }
 
 model ProjectBoundary {
@@ -167,4 +168,15 @@ model CadShapeAppearance {
   updatedAt    DateTime      @updatedAt
 
   @@unique([conversionId, cadRegionId])
+}
+
+model ProjectAppearanceSettings {
+  id              Int        @id @default(autoincrement())
+  projectId       Int        @unique
+  project         CadProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dimensionColor  String?
+  plotColor       String?
+  plotLabelColor  String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 }

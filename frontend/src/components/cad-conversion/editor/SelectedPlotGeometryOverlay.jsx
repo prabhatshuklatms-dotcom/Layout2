@@ -177,7 +177,7 @@ function getSvgGeometry(svgEl, shapeId) {
             
             if (isCurve) {
               try {
-                const pathStr = `M ${currentPt.x} ${currentPt.y} ${tokens.slice(i, i+consumed).join(' ')}`;
+                const pathStr = `M ${currentPt.x} ${currentPt.y} ${activeCmd} ${tokens.slice(i, i+consumed).join(' ')}`;
                 const tmpPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 tmpPath.setAttribute('d', pathStr);
                 const len = tmpPath.getTotalLength();
@@ -236,7 +236,7 @@ function getSvgGeometry(svgEl, shapeId) {
   }
 }
 
-export default function SelectedPlotGeometryOverlay({ selectedShapeId, svgRef, plots, statuses, showPlotStatus, scale }) {
+export default function SelectedPlotGeometryOverlay({ selectedShapeId, svgRef, plots, statuses, showPlotStatus, scale, appearanceSettings }) {
   const [geometry, setGeometry] = useState(null);
 
   useEffect(() => {
@@ -352,34 +352,7 @@ export default function SelectedPlotGeometryOverlay({ selectedShapeId, svgRef, p
     if (!dim.targetEdge) return;
     const e = dim.targetEdge;
     
-    if (e.isCurve) {
-      if (!e.normal) {
-        console.warn('CRITICAL: e.normal is undefined for edge!', e, dim);
-        e.normal = { x: 0, y: 0 };
-      }
-      const offset = Math.max(plotAvgDim * 0.05, 1);
-      
-      let nx = e.normal.x;
-      let ny = e.normal.y;
-      const rx = e.midPt.x - centroid.x;
-      const ry = e.midPt.y - centroid.y;
-      if (nx * rx + ny * ry < 0) {
-        nx = -nx;
-        ny = -ny;
-      }
-
-      const x = e.midPt.x + nx * offset;
-      const y = e.midPt.y + ny * offset;
-      
-      let angle = Math.atan2(-nx, ny) * (180 / Math.PI);
-      if (angle > 90 || angle < -90) angle += 180;
-      
-      dimensionLabels.push({
-        text: `${dim.value} ${dim.unit || fallbackUnit}`.trim(),
-        x, y, angle,
-        isCurve: true
-      });
-    } else {
+    if (e.isCurve) return;
       const dx = e.p2.x - e.p1.x;
       const dy = e.p2.y - e.p1.y;
       const len = Math.hypot(dx, dy);
@@ -412,8 +385,11 @@ export default function SelectedPlotGeometryOverlay({ selectedShapeId, svgRef, p
         tickSize: offset * 0.5,
         isCurve: false
       });
-    }
   });
+
+  const dimColor = (appearanceSettings?.dimensionColor && appearanceSettings.dimensionColor !== 'null') 
+    ? appearanceSettings.dimensionColor 
+    : '#ffffff';
 
   return (
     <g id="selected-plot-geometry-overlay" className="pointer-events-none">
@@ -448,9 +424,10 @@ export default function SelectedPlotGeometryOverlay({ selectedShapeId, svgRef, p
                     <line 
                       x1={lbl.p1.x} y1={lbl.p1.y} 
                       x2={p1_end.x} y2={p1_end.y} 
-                      stroke="#ffffff" 
+                      stroke={dimColor} 
                       strokeWidth={smallFontSize * 0.1} 
                       strokeDasharray={`${smallFontSize * 0.4},${smallFontSize * 0.4}`}
+                      data-custom-color="true"
                     />
                   )}
                   {/* Dashed line right segment */}
@@ -458,24 +435,27 @@ export default function SelectedPlotGeometryOverlay({ selectedShapeId, svgRef, p
                     <line 
                       x1={p2_start.x} y1={p2_start.y} 
                       x2={lbl.p2.x} y2={lbl.p2.y} 
-                      stroke="#ffffff" 
+                      stroke={dimColor} 
                       strokeWidth={smallFontSize * 0.1} 
                       strokeDasharray={`${smallFontSize * 0.4},${smallFontSize * 0.4}`}
+                      data-custom-color="true"
                     />
                   )}
                   {/* End tick 1 */}
                   <line 
                     x1={lbl.p1.x - lbl.nx * lbl.tickSize} y1={lbl.p1.y - lbl.ny * lbl.tickSize} 
                     x2={lbl.p1.x + lbl.nx * lbl.tickSize} y2={lbl.p1.y + lbl.ny * lbl.tickSize} 
-                    stroke="#ffffff" 
+                    stroke={dimColor} 
                     strokeWidth={smallFontSize * 0.1} 
+                    data-custom-color="true"
                   />
                   {/* End tick 2 */}
                   <line 
                     x1={lbl.p2.x - lbl.nx * lbl.tickSize} y1={lbl.p2.y - lbl.ny * lbl.tickSize} 
                     x2={lbl.p2.x + lbl.nx * lbl.tickSize} y2={lbl.p2.y + lbl.ny * lbl.tickSize} 
-                    stroke="#ffffff" 
+                    stroke={dimColor} 
                     strokeWidth={smallFontSize * 0.1} 
+                    data-custom-color="true"
                   />
                 </>
               );
@@ -487,7 +467,7 @@ export default function SelectedPlotGeometryOverlay({ selectedShapeId, svgRef, p
               x="0" y="0" 
               textAnchor="middle" 
               dominantBaseline="central"
-              fill="#ffffff" 
+              fill={dimColor} 
               fontSize={smallFontSize} 
               fontWeight="600"
             >

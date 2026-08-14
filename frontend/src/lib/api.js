@@ -280,3 +280,23 @@ export async function updateProjectBoundary(id, data) {
 export async function deleteProjectBoundary(id) {
   return request(`/api/boundary/${id}`, { method: 'DELETE' });
 }
+
+// ─── Project Appearance Settings ──────────────────────────────────────────────
+
+export async function getProjectAppearanceSettings(projectId) {
+  return request(`/cad-projects/${projectId}/appearance-settings`);
+}
+
+export async function createProjectAppearanceSettings(projectId, data) {
+  return request(`/cad-projects/${projectId}/appearance-settings`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateProjectAppearanceSettings(projectId, data) {
+  return request(`/cad-projects/${projectId}/appearance-settings`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}

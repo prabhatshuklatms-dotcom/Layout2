@@ -6,11 +6,12 @@ import CadEditorToolbar from './CadEditorToolbar';
 import CadEditorCanvas from './CadEditorCanvas';
 import CadEditorSidebar from './CadEditorSidebar';
 import { parseSvgStringToState, serializeStateToSvgString } from './SvgDocumentModel';
-import { getProjectPlots, getPlotStatuses, getProjectPlotStatuses, getAmenities, getAmenityPlacements, updateProjectPlotAssignment, getCadProject, updateCadProject, updateProjectPlot } from '@/lib/api';
+import { getProjectPlots, getPlotStatuses, getProjectPlotStatuses, getAmenities, getAmenityPlacements, updateProjectPlotAssignment, getCadProject, updateCadProject, updateProjectPlot, getProjectAppearanceSettings } from '@/lib/api';
 import Swal from 'sweetalert2';
 export default function CadEditorWorkspace({ conversionId, projectId, readOnly = false, showPlotStatus: showPlotStatusProp, onUserViewerSelection, onZoomChange: onZoomChangeProp }) {
   const [conversion, setConversion] = useState(null);
   const [projectConfig, setProjectConfig] = useState(null);
+  const [appearanceSettings, setAppearanceSettings] = useState(null);
   const [svgContent, setSvgContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -268,11 +269,17 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
     .catch(console.error);
 
     if (projectId) {
-      Promise.all([getCadProject(projectId), getProjectPlots(projectId, { pagination: false }), getProjectPlotStatuses(projectId, { pagination: false })])
-        .then(([proj, p, s]) => {
+      Promise.all([
+        getCadProject(projectId), 
+        getProjectPlots(projectId, { pagination: false }), 
+        getProjectPlotStatuses(projectId, { pagination: false }),
+        getProjectAppearanceSettings(projectId).catch(() => null)
+      ])
+        .then(([proj, p, s, appearance]) => {
           setProjectConfig(proj);
           setPlots(p);
           setStatuses(s);
+          if (appearance) setAppearanceSettings(appearance);
           
           setSvgContent(currentSvg => {
             if (!currentSvg) return currentSvg;
@@ -490,9 +497,11 @@ export default function CadEditorWorkspace({ conversionId, projectId, readOnly =
             conversionId={conversionId}
             projectId={projectId}
             projectConfig={projectConfig}
+            appearanceSettings={appearanceSettings}
             onSelectionChange={(ids, shapes) => { 
               setSelectedShapeIds(ids); 
               setSelectedShapes(shapes); 
+              
               if (onUserViewerSelection) {
                 if (ids.length === 1 && shapes.length === 1) {
                   const shape = shapes[0];

@@ -651,7 +651,8 @@ export default function CadEditorCanvas({
   masterAmenities = [],
   placedAmenities = [],
   setPlacedAmenities,
-  conversionId
+  conversionId,
+  appearanceSettings
 }) {
   const containerRef = useRef(null);
   const contentRef = useRef(null);
@@ -1468,10 +1469,21 @@ export default function CadEditorCanvas({
     });
   };
 
-  // Resolve a click target to the best shape ID in documentState.
-  // Prefers the most specific (deepest) fillable element over parent groups.
   const resolveShapeId = (targetEl) => {
     if (targetEl.closest('[data-cad-type="background"]')) return null;
+
+    // In readOnly mode (User Viewer), prioritize selecting the parent plot wrapper
+    // instead of the physical child geometry so that Plot Appearance colors can propagate.
+    if (readOnly) {
+      let current = targetEl;
+      while (current && current.tagName?.toLowerCase() !== 'svg') {
+        if (current.id && (current.id.startsWith('cad-plot-') || current.hasAttribute('data-plot-id')) && findShapeDeep(documentState.shapes, current.id)) {
+          return current.id;
+        }
+        current = current.parentElement;
+      }
+    }
+
     const FILLABLE_TAGS = new Set(['path', 'polyline', 'polygon', 'rect', 'circle', 'ellipse', 'line', 'text', 'tspan', 'use']);
     // First pass: walk up looking for a tracked fillable element (not a <g>)
     let el = targetEl;
@@ -1673,22 +1685,24 @@ export default function CadEditorCanvas({
           const hit = cadHitTestRegion(svgEl, e.clientX, e.clientY);
           if (hit) {
             const boundaryEl = hit.element;
-            shapeId = boundaryEl.id || resolveShapeId(boundaryEl);
+            shapeId = readOnly ? resolveShapeId(boundaryEl) : (boundaryEl.id || resolveShapeId(boundaryEl));
 
-            const prevStroke = boundaryEl.getAttribute('stroke');
-            const prevStrokeWidth = boundaryEl.getAttribute('stroke-width');
-            const prevStrokeOpacity = boundaryEl.getAttribute('stroke-opacity');
-            boundaryEl.setAttribute('stroke', '#facc15');
-            boundaryEl.setAttribute('stroke-width', '3');
-            boundaryEl.setAttribute('stroke-opacity', '1');
-            setTimeout(() => {
-              if (prevStroke === null) boundaryEl.removeAttribute('stroke');
-              else boundaryEl.setAttribute('stroke', prevStroke);
-              if (prevStrokeWidth === null) boundaryEl.removeAttribute('stroke-width');
-              else boundaryEl.setAttribute('stroke-width', prevStrokeWidth);
-              if (prevStrokeOpacity === null) boundaryEl.removeAttribute('stroke-opacity');
-              else boundaryEl.setAttribute('stroke-opacity', prevStrokeOpacity);
-            }, 350);
+            if (!readOnly) {
+              const prevStroke = boundaryEl.getAttribute('stroke');
+              const prevStrokeWidth = boundaryEl.getAttribute('stroke-width');
+              const prevStrokeOpacity = boundaryEl.getAttribute('stroke-opacity');
+              boundaryEl.setAttribute('stroke', '#facc15');
+              boundaryEl.setAttribute('stroke-width', '3');
+              boundaryEl.setAttribute('stroke-opacity', '1');
+              setTimeout(() => {
+                if (prevStroke === null) boundaryEl.removeAttribute('stroke');
+                else boundaryEl.setAttribute('stroke', prevStroke);
+                if (prevStrokeWidth === null) boundaryEl.removeAttribute('stroke-width');
+                else boundaryEl.setAttribute('stroke-width', prevStrokeWidth);
+                if (prevStrokeOpacity === null) boundaryEl.removeAttribute('stroke-opacity');
+                else boundaryEl.setAttribute('stroke-opacity', prevStrokeOpacity);
+              }, 350);
+            }
           }
         }
 
@@ -1702,6 +1716,7 @@ export default function CadEditorCanvas({
           } else {
             setSelectedShapeIds([shapeId]);
           }
+
 
           // Double click to edit text
           if ((tag === 'text' || tag === 'tspan') && e.detail === 2) {
@@ -2140,6 +2155,7 @@ export default function CadEditorCanvas({
   }, []);
 
   const getCursor = () => {
+    if (readOnly) return isDragging.current ? 'grabbing' : 'pointer';
     if (activeTool === 'eraser') return 'crosshair';
     if (activeTool === 'partial_delete') return 'crosshair';
     if (activeTool === 'vector_eraser') return 'none'; // Circle drawn in SVG
@@ -2158,49 +2174,116 @@ export default function CadEditorCanvas({
     ? selectedShapeIds[0]
     : null;
 
+  useEffect(() => {
+    let animId;
+    if (readOnly && focusedId) {
+      const timer = setTimeout(() => {
+        const plotEl = document.getElementById(focusedId);
+        if (plotEl && containerRef.current) {
+          const plotRect = plotEl.getBoundingClientRect();
+          const rect = containerRef.current.getBoundingClientRect();
+          
+          if (plotRect.width === 0 || plotRect.height === 0) return;
+
+          const S = transform.current.scale;
+          const X = transform.current.x;
+          const Y = transform.current.y;
+
+          const unscaledW = plotRect.width / S;
+          const unscaledH = plotRect.height / S;
+          const unscaledCx = (plotRect.left + plotRect.width / 2 - rect.left - X) / S;
+          const unscaledCy = (plotRect.top + plotRect.height / 2 - rect.top - Y) / S;
+
+          let targetS = 0.65 * Math.min(rect.width / unscaledW, rect.height / unscaledH);
+          if (targetS > 15) targetS = 15;
+          if (targetS < 0.1) targetS = 0.1;
+
+          const targetX = rect.width / 2 - targetS * unscaledCx;
+          const targetY = rect.height / 2 - targetS * unscaledCy;
+
+          const startX = transform.current.x;
+          const startY = transform.current.y;
+          const startScale = transform.current.scale;
+          
+          const duration = 400;
+          let startTime = null;
+          
+          const animate = (time) => {
+            if (!startTime) startTime = time;
+            let elapsed = time - startTime;
+            if (elapsed > duration) elapsed = duration;
+            
+            const t = elapsed / duration;
+            // easeInOutCubic
+            const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            
+            transform.current.x = startX + (targetX - startX) * ease;
+            transform.current.y = startY + (targetY - startY) * ease;
+            transform.current.scale = startScale + (targetS - startScale) * ease;
+            requestUpdate();
+            
+            if (elapsed < duration) {
+              animId = requestAnimationFrame(animate);
+            }
+          };
+          animId = requestAnimationFrame(animate);
+        }
+      }, 50);
+      return () => {
+        clearTimeout(timer);
+        if (animId) cancelAnimationFrame(animId);
+      };
+    }
+  }, [focusedId, readOnly]);
+
   // Build the CSS string only when the focused ID changes.
   // Interpolating the ID into the selector is the only way to target a
   // specific SVG element by ID in CSS without touching the React render tree.
   const focusModeCSS = focusedId
     ? `
-      /* ── Focus Mode: dim all top-level SVG children ───────────────────── */
-      .cad-svg-container.focus-active svg > * {
+      /* ── Focus Mode: dim all leaf geometry elements (avoids multiplying opacity through <g>) ── */
+      .cad-svg-container.focus-active svg path,
+      .cad-svg-container.focus-active svg polygon,
+      .cad-svg-container.focus-active svg polyline,
+      .cad-svg-container.focus-active svg rect,
+      .cad-svg-container.focus-active svg circle,
+      .cad-svg-container.focus-active svg ellipse,
+      .cad-svg-container.focus-active svg use,
+      .cad-svg-container.focus-active svg text {
         opacity: 0.25;
         transition: opacity 200ms ease;
       }
 
-      /* ── Selected plot shape — full brightness ─────────────────────────── */
-      .cad-svg-container.focus-active svg #${CSS.escape(focusedId)} {
+      /* ── Selected plot shape AND its children — full brightness ─────────────────────────── */
+      .cad-svg-container.focus-active svg #${CSS.escape(focusedId)},
+      .cad-svg-container.focus-active svg #${CSS.escape(focusedId)} * {
         opacity: 1 !important;
         transition: opacity 200ms ease;
       }
 
-      /* ── Label overlay: lift back to 1 so child rules work at face value ─ */
-      /* (SVG opacity is multiplicative: parent 0.25 × child 1 = 0.25 shown)  */
-      .cad-svg-container.focus-active svg #plot-labels-overlay {
-        opacity: 1 !important;
-      }
-      /* Dim every label group inside the overlay individually */
-      .cad-svg-container.focus-active svg #plot-labels-overlay > g {
-        opacity: 0.25;
-        transition: opacity 200ms ease;
-      }
-      /* Re-brighten only the label that belongs to the selected plot */
-      .cad-svg-container.focus-active svg #plot-labels-overlay g[data-label-for="${CSS.escape(focusedId)}"] {
+      /* ── Label overlay ─────────────────────────────────────────────────── */
+      /* Re-brighten only the label elements that belong to the selected plot */
+      .cad-svg-container.focus-active svg #plot-labels-overlay g[data-label-for="${CSS.escape(focusedId)}"] * {
         opacity: 1 !important;
         transition: opacity 200ms ease;
       }
 
       /* ── Dimension / geometry overlay for the selected plot ────────────── */
-      /* This overlay only exists while a plot is selected, so it is always   */
-      /* correct — lift it out of the blanket dim.                             */
-      .cad-svg-container.focus-active svg #selected-plot-geometry-overlay {
+      /* This overlay only exists while a plot is selected, so re-brighten all its children */
+      .cad-svg-container.focus-active svg #selected-plot-geometry-overlay * {
         opacity: 1 !important;
       }
     `
     : `
       /* ── Focus Mode off: restore all elements ── */
-      .cad-svg-container svg > * {
+      .cad-svg-container svg path,
+      .cad-svg-container svg polygon,
+      .cad-svg-container svg polyline,
+      .cad-svg-container svg rect,
+      .cad-svg-container svg circle,
+      .cad-svg-container svg ellipse,
+      .cad-svg-container svg use,
+      .cad-svg-container svg text {
         transition: opacity 200ms ease;
       }
     `;
@@ -2279,12 +2362,13 @@ export default function CadEditorCanvas({
                 <ShapeRenderer
                   key={`${shape.id}-${index}`}
                   shape={shape}
-                  isSelected={selectedShapeIds.includes(shape.id)}
+                  selectedShapeIds={selectedShapeIds}
                   onPointerDown={handleShapePointerDown}
                   plots={plots}
                   statuses={statuses}
                   showPlotStatus={showPlotStatus}
                   readOnly={readOnly}
+                  appearanceSettings={appearanceSettings}
                 />
               ))}
               <PlotLabelsOverlay
@@ -2296,6 +2380,7 @@ export default function CadEditorCanvas({
                 readOnly={readOnly}
                 projectConfig={projectConfig}
                 selectedShapeIds={selectedShapeIds}
+                appearanceSettings={appearanceSettings}
               />
               <AmenitiesOverlay
                 placedAmenities={placedAmenities}
@@ -2467,8 +2552,9 @@ export default function CadEditorCanvas({
                     plots={plots}
                     statuses={statuses}
                     showPlotStatus={showPlotStatus}
-                  readOnly={readOnly}
+                    readOnly={readOnly}
                     scale={transform.current.scale}
+                    appearanceSettings={appearanceSettings}
                   />
                 )}
               </svg>

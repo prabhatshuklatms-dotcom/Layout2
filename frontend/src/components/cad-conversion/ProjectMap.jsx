@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { MapPin, ArrowRight, Loader2 } from 'lucide-react';
 import { getProjectBoundaries } from '@/lib/api';
@@ -12,6 +12,9 @@ const BOUNDARY_DRAW_MODE = { POINTER: 'POINTER' };
 export default function ProjectMap({ project }) {
   const [boundary, setBoundary] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  const mapContainerRef = useRef(null);
+  const [isMapVisible, setIsMapVisible] = useState(false);
 
   useEffect(() => {
     if (project?.id) {
@@ -31,6 +34,24 @@ export default function ProjectMap({ project }) {
       setLoading(false);
     }
   }, [project?.id]);
+
+  useEffect(() => {
+    if (loading || !boundary) return;
+    const el = mapContainerRef.current;
+    if (!el) return;
+    
+    const observer = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          setIsMapVisible(true);
+        } else {
+          setIsMapVisible(false);
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loading, boundary]);
 
   if (!project) return null;
 
@@ -52,17 +73,19 @@ export default function ProjectMap({ project }) {
         ) : boundary ? (
           <div className="flex flex-col w-full h-full">
             {/* Map Preview */}
-            <div className="w-full h-48 sm:h-64 lg:h-80 xl:h-72 2xl:h-80 relative bg-[#0a0a0a] pointer-events-none">
-               <LeafletMap
-                  mapType="hybrid"
-                  drawMode={BOUNDARY_DRAW_MODE.POINTER}
-                  drawingBoundary={false}
-                  boundaries={[boundary]}
-                  activeBoundaryId={null}
-                  initialBounds={boundary.latMin ? [[boundary.latMin, boundary.lngMin], [boundary.latMax, boundary.lngMax]] : null}
-                  staticPreview={true}
-                  className="w-full h-full"
-               />
+            <div ref={mapContainerRef} className="w-full h-[450px] sm:h-[500px] lg:h-[550px] xl:h-[600px] 2xl:h-[700px] relative bg-[#0a0a0a] pointer-events-none">
+               {isMapVisible && (
+                 <LeafletMap
+                    mapType="hybrid"
+                    drawMode={BOUNDARY_DRAW_MODE.POINTER}
+                    drawingBoundary={false}
+                    boundaries={[boundary]}
+                    activeBoundaryId={null}
+                    initialBounds={boundary.latMin ? [[boundary.latMin, boundary.lngMin], [boundary.latMax, boundary.lngMax]] : null}
+                    staticPreview={true}
+                    className="w-full h-full"
+                 />
+               )}
                {/* Overlay to ensure it feels like a static card preview */}
                <div className="absolute inset-0 ring-1 ring-inset ring-black/50 z-10" />
             </div>

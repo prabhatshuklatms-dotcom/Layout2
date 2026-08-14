@@ -1,22 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { resolvePlotFill } from '../../shared/appearance/appearanceResolver';
 
-const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onPointerDown, plots, statuses, showPlotStatus, readOnly }) {
+const ShapeRenderer = React.memo(function ShapeRenderer({ 
+  shape, 
+  selectedShapeIds = [],
+  parentIsSelected = false,
+  onPointerDown, 
+  plots, 
+  statuses, 
+  showPlotStatus, 
+  readOnly, 
+  appearanceSettings,
+  inheritedPlotIdStr = null
+}) {
   if (!shape) return null;
   if (shape.id === 'composite-plot-labels' || shape.id === 'composite-amenities') return null;
 
   let transformStr = shape.rawTransform || '';
 
+  // Determine the plot identity for this node and its children
+  let currentPlotIdStr = shape.attributes?.['data-plot-id'];
+  if (!currentPlotIdStr && shape.attributes?.['data-cad-type'] === 'hatch' && shape.attributes?.['data-boundary-ref']?.startsWith('cad-plot-')) {
+    currentPlotIdStr = shape.attributes['data-boundary-ref'].replace('cad-plot-', '');
+  }
+  const activePlotIdStr = currentPlotIdStr || inheritedPlotIdStr;
+
+  const currentIsSelected = parentIsSelected || 
+                            selectedShapeIds.includes(shape.id) || 
+                            (shape.attributes?.['data-cad-type'] === 'hatch' && selectedShapeIds.includes(shape.attributes?.['data-boundary-ref']));
+
   const children = (shape.children || []).map((child, index) => (
     <ShapeRenderer 
       key={`${child.id}-${index}`} 
       shape={child} 
-      isSelected={isSelected} 
+      selectedShapeIds={selectedShapeIds}
+      parentIsSelected={currentIsSelected}
       onPointerDown={onPointerDown}
       plots={plots}
       statuses={statuses}
       showPlotStatus={showPlotStatus}
       readOnly={readOnly}
+      appearanceSettings={appearanceSettings}
+      inheritedPlotIdStr={activePlotIdStr}
     />
   ));
 
@@ -44,7 +69,7 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
     delete reactAttrs.vectorEffect;
   }
 
-  const resolvedFill = resolvePlotFill(shape, plots, statuses, showPlotStatus);
+  const resolvedFill = resolvePlotFill(shape, plots, statuses, showPlotStatus, false, appearanceSettings, currentIsSelected, readOnly);
 
   if (resolvedFill !== null) {
     reactAttrs.fill = resolvedFill;
@@ -52,18 +77,13 @@ const ShapeRenderer = React.memo(function ShapeRenderer({ shape, isSelected, onP
     delete reactAttrs.fill;
   }
 
-  if (shape.id === 'cad-plot-41' || shape.attributes['data-plot-id'] === '41' || shape.attributes['data-plot-id'] === '6') {
-    setTimeout(() => {
-      const el = document.getElementById(shape.id);
-      if (el) {
-        console.log("[STATUS TRACE] DOM fill attribute =", el.getAttribute('fill'));
-        console.log("[STATUS TRACE] DOM inline fill =", el.style.fill);
-        console.log("[STATUS TRACE] DOM computed fill =", getComputedStyle(el).fill);
-      }
-    }, 50);
+  // Override fill for actual physical geometry when plot is selected in read-only mode
+  const isGeometry = Tag === 'path' || Tag === 'polygon' || Tag === 'rect' || Tag === 'circle' || Tag === 'polyline';
+  if (isGeometry && activePlotIdStr && currentIsSelected && readOnly && appearanceSettings?.plotColor) {
+    reactAttrs.fill = appearanceSettings.plotColor;
   }
 
-  if (isSelected && (Tag === 'path' || Tag === 'polygon' || Tag === 'rect' || Tag === 'circle' || Tag === 'polyline' || Tag === 'line')) {
+  if (!readOnly && currentIsSelected && (Tag === 'path' || Tag === 'polygon' || Tag === 'rect' || Tag === 'circle' || Tag === 'polyline' || Tag === 'line')) {
     reactAttrs.strokeWidth = reactAttrs.strokeWidth ? reactAttrs.strokeWidth : '3';
     reactAttrs.filter = 'drop-shadow(0 0 4px rgba(255,255,255,0.8))';
     reactAttrs.paintOrder = 'stroke fill markers';

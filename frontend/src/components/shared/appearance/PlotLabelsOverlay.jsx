@@ -44,7 +44,7 @@ function pbComputeCentroid(element) {
   }
 }
 
-export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readOnly, selectedShapeIds, projectConfig }) {
+export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readOnly, selectedShapeIds, projectConfig, appearanceSettings }) {
   const [labels, setLabels] = useState([]);
   const [dragState, setDragState] = useState(null);
 
@@ -87,21 +87,77 @@ export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readO
         
         if (plot) {
           try {
+            // Calculate centroid in element's local coordinates
             const localC = pbComputeCentroid(el);
-            const pt = svgEl.createSVGPoint();
-            pt.x = localC.x;
-            pt.y = localC.y;
-
-            const elementCTM = el.getCTM();
-            const svgCTM = svgEl.getCTM();
+            
+            // Get element's transform attribute
+            const elementTransform = el.getAttribute('transform') || '';
+            
             let globalX = localC.x;
             let globalY = localC.y;
-
-            if (elementCTM && svgCTM) {
-              const transformMatrix = svgCTM.inverse().multiply(elementCTM);
-              const globalPt = pt.matrixTransform(transformMatrix);
-              globalX = globalPt.x;
-              globalY = globalPt.y;
+            
+            // Apply element transform if present
+            if (elementTransform) {
+              try {
+                const svgNS = 'http://www.w3.org/2000/svg';
+                const pt = document.createElementNS(svgNS, 'svg').createSVGPoint();
+                pt.x = localC.x;
+                pt.y = localC.y;
+                
+                // Parse transform string
+                const transformList = svgEl.createSVGTransformList();
+                const transform = svgEl.createSVGTransform();
+                transform.setMatrix(svgEl.createSVGMatrix());
+                
+                // Apply transforms in order
+                const transforms = elementTransform.match(/(\w+\([^)]+\))/g) || [];
+                for (const t of transforms) {
+                  const match = t.match(/(\w+)\(([^)]+)\)/);
+                  if (!match) continue;
+                  
+                  const [_, type, values] = match;
+                  const nums = values.split(/[,\s]+/).map(parseFloat);
+                  
+                  switch(type.toLowerCase()) {
+                    case 'translate':
+                      if (nums.length >= 2) {
+                        transform.setTranslate(nums[0], nums[1]);
+                        pt.matrixTransform(transform.matrix);
+                      }
+                      break;
+                    case 'scale':
+                      if (nums.length >= 1) {
+                        transform.setScale(nums[0], nums.length >= 2 ? nums[1] : nums[0]);
+                        pt.matrixTransform(transform.matrix);
+                      }
+                      break;
+                    case 'rotate':
+                      if (nums.length >= 1) {
+                        const angle = nums[0];
+                        const cx = nums.length >= 2 ? nums[1] : 0;
+                        const cy = nums.length >= 3 ? nums[2] : 0;
+                        transform.setRotate(angle, cx, cy);
+                        pt.matrixTransform(transform.matrix);
+                      }
+                      break;
+                    case 'matrix':
+                      if (nums.length >= 6) {
+                        const m = svgEl.createSVGMatrix();
+                        m.a = nums[0]; m.b = nums[1];
+                        m.c = nums[2]; m.d = nums[3];
+                        m.e = nums[4]; m.f = nums[5];
+                        transform.setMatrix(m);
+                        pt.matrixTransform(transform.matrix);
+                      }
+                      break;
+                  }
+                }
+                
+                globalX = pt.x;
+                globalY = pt.y;
+              } catch (transformErr) {
+                console.warn('Transform parsing error:', transformErr);
+              }
             }
 
             const dx = parseFloat(el.getAttribute('data-label-dx') || 0);
@@ -185,10 +241,19 @@ export default function PlotLabelsOverlay({ svgRef, plots, onLabelDragEnd, readO
 
         const isSelected = selectedShapeIds?.includes(id);
         const plotMetadata = plot.metadata || {};
-        const color = plotMetadata.labelFontColor || projectConfig?.labelFontColor || '#FFFFFF';
+        
+        let color = plotMetadata.labelFontColor || projectConfig?.labelFontColor || '#FFFFFF';
+        let strokeColor = plotMetadata.labelFontColor || projectConfig?.labelFontColor || '#FFFFFF';
+        
+        if (isSelected && readOnly && appearanceSettings) {
+          const apiColor = appearanceSettings.plotLabelColor;
+          const labelColor = (apiColor && apiColor !== 'null') ? apiColor : '#FFFFFF';
+          color = labelColor;
+          strokeColor = labelColor;
+        }
+
         const fontFamily = plotMetadata.labelFontFamily || projectConfig?.labelFontFamily || 'sans-serif';
         const strokeWidth = plotMetadata.labelStrokeWidth !== undefined && plotMetadata.labelStrokeWidth !== null ? parseFloat(plotMetadata.labelStrokeWidth) : 0;
-        const strokeColor = plotMetadata.labelFontColor || projectConfig?.labelFontColor || '#FFFFFF';
         const showArea = isSelected;
         const showWidth = false; // Dimensions are handled by geometry overlay
         const showHeight = false;

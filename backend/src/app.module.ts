@@ -11,6 +11,7 @@ import { ProjectPlotModule } from './project-plot/project-plot.module';
 import { AmenityModule } from './amenity/amenity.module';
 import { AmenityPlacementModule } from './amenity-placement/amenity-placement.module';
 import { ProjectBoundaryModule } from './project-boundary/project-boundary.module';
+import { ProjectAppearanceSettingsModule } from './project-appearance-settings/project-appearance-settings.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ProjectBoundaryModule } from './project-boundary/project-boundary.modul
     AmenityModule,
     AmenityPlacementModule,
     ProjectBoundaryModule,
+    ProjectAppearanceSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
